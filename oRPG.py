@@ -375,6 +375,7 @@ footer{margin-top:20px;color:#7b8b9b}
 </style>
 </head>
 <body>
+<div id="busy" class="small" style="display:none;position:fixed;top:10px;right:10px;background:#12202f;border:1px solid #1e3146;border-radius:8px;padding:4px 8px;z-index:1000">⏳ thinking…</div>
 <div class="container">
   <header>
     <div class="brand">⚔️ Ollama Fantasy Party</div>
@@ -455,11 +456,23 @@ const S = {
   joinCodeRequired: false,
   canResolve: false,
   actionDirty: false,
-  lastTurn: 0
+  lastTurn: 0,
+  pendingOps: 0,
+  serverResolving: false
 };
 
 function qs(id){return document.getElementById(id)}
 function show(id, v){qs(id).style.display = v ? "" : "none"}
+
+function updateBusy(){
+  show("busy", S.pendingOps > 0 || S.serverResolving);
+}
+
+function busy(on){
+  S.pendingOps += on ? 1 : -1;
+  if(S.pendingOps < 0) S.pendingOps = 0;
+  updateBusy();
+}
 
 qs("action").addEventListener("input", () => { S.actionDirty = true; });
 
@@ -494,6 +507,8 @@ function render(state){
   qs("scenario").textContent = state.scenario || "Waiting for the first scene…";
   qs("summary").textContent  = state.summary || "(none yet)";
   qs("resolving").style.display = state.resolving ? "" : "none";
+  S.serverResolving = !!state.resolving;
+  updateBusy();
   S.canResolve = state.can_resolve;
   show("resolveBtn", !!S.canResolve);
 
@@ -526,6 +541,7 @@ async function doJoin(){
   const background = qs("background").value.trim();
   const code = qs("joinCode")?.value.trim() || "";
   if(!name || !background){ alert("Please fill in name and background."); return; }
+  busy(true);
   try{
     const res = await api("/join", {method:"POST", body: JSON.stringify({name, background, code})});
     S.player_id = res.player_id; S.name = res.name;
@@ -533,27 +549,42 @@ async function doJoin(){
     localStorage.setItem("name", S.name);
     show("join", false); show("game", true);
     refresh();
-  }catch(e){ alert("Join failed: " + e.message); }
+  }catch(e){
+    alert("Join failed: " + e.message);
+  }finally{
+    busy(false);
+  }
 }
 
 async function submitAction(){
   if(!S.player_id){ alert("Join first!"); return; }
   const text = qs("action").value;
-  await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
-  S.actionDirty = false;
-  refresh();
+  busy(true);
+  try{
+    await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
+    S.actionDirty = false;
+    refresh();
+  }finally{
+    busy(false);
+  }
 }
 
 async function clearAction(){
   if(!S.player_id) return;
-  await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text: ""})});
-  qs("action").value = "";
-  S.actionDirty = false;
-  refresh();
+  busy(true);
+  try{
+    await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text: ""})});
+    qs("action").value = "";
+    S.actionDirty = false;
+    refresh();
+  }finally{
+    busy(false);
+  }
 }
 
 async function resolveNow(){
   if(!S.canResolve){ alert("Resolving is disabled by host."); return; }
+  busy(true);
   try{
     show("resolving", true);
     await api("/resolve", {method:"POST", body: JSON.stringify({player_id: S.player_id})});
@@ -561,6 +592,7 @@ async function resolveNow(){
     alert("Resolve failed: " + e.message);
   }finally{
     show("resolving", false);
+    busy(false);
     refresh();
   }
 }
