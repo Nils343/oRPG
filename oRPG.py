@@ -248,9 +248,12 @@ async def resolve_turn(req: Request):
     # anybody can trigger if enabled
     body = await req.json()
     pid = body.get("player_id")
-    if not ALLOW_ANYONE_TO_RESOLVE:
-        if not pid or pid not in GAME.players or pid != GAME.host_id:   # <— CHANGED
-            return JSONResponse({"error": "Only the host can resolve turns."}, status_code=403)
+    if not pid or pid not in GAME.players:
+        return JSONResponse({"error": "Invalid player."}, status_code=400)
+    if not ALLOW_ANYONE_TO_RESOLVE and pid != GAME.host_id:
+        return JSONResponse({"error": "Only the host can resolve turns."}, status_code=403)
+
+    GAME.players[pid].last_seen = time.time()
 
     async with GAME.lock:
         if GAME.resolving:
