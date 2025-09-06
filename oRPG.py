@@ -117,7 +117,7 @@ async def ollama_chat(messages: List[Dict[str, str]], options: Optional[Dict]=No
 GM_SYSTEM_PROMPT = """You are the Game Master (GM) for a cooperative, turn-based fantasy text adventure played in a browser.
 Write vivid but concise scenes (max ~200 words). Always end your output with: "— What do you do?"
 Adhere to continuity using the 'Summary of Facts'. Respect the party roster and their abilities/power.
-No dice mechanics; narrate plausible outcomes. Keep content PG-13. Avoid railroading; present meaningful choices.
+No dice mechanics; narrate plausible outcomes. Avoid railroading; present meaningful choices.
 """
 
 def initial_scene_user_message(summary: str, party: str) -> str:
@@ -191,9 +191,9 @@ async def get_state(player_id: Optional[str] = None):
         "your_action": your_action,
         "actions_submitted": len(GAME.current_actions),
         "resolving": GAME.resolving,
-        "can_resolve": ALLOW_ANYONE_TO_RESOLVE or is_host,   # <— CHANGED
+        "can_resolve": ALLOW_ANYONE_TO_RESOLVE or is_host,
         "join_code_required": bool(JOIN_CODE),
-        "is_host": is_host,           # <— optional: let the UI badge the host
+        "is_host": is_host,
     }
 
 @app.post("/join")
@@ -210,8 +210,7 @@ async def join(req: Request):
 
     # scale power to party
     active = GAME.active_players()
-    avg_power = sum([p.power for p in active]) / len(active) if active else 1.0
-    power = max(0.85, min(1.15, avg_power + (0.02 if len(active) < 3 else 0)))  # gentle nudge for small parties
+    power = sum([p.power for p in active]) / len(active) if active else 1.0
     arche = archetype_for_background(background)
     abilities = abilities_for_archetype(arche, power, background)
 
@@ -222,8 +221,8 @@ async def join(req: Request):
 
     # if this is the first player, spin up an initial scene (lock-protected)
     if GAME.turn_number == 0 and not GAME.current_scenario:
-        async with GAME.lock:                         # <— NEW
-            if GAME.turn_number == 0 and not GAME.current_scenario:  # <— NEW
+        async with GAME.lock:                         
+            if GAME.turn_number == 0 and not GAME.current_scenario:  
                 await ensure_initial_scene()
     return {"player_id": p.id, "name": p.name}
 
