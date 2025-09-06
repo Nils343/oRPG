@@ -41,3 +41,23 @@ def test_join_requires_code_and_sets_host(monkeypatch):
     data2 = resp2.json()
     assert g.host_id != data2["player_id"]
     assert called["flag"] is False
+
+
+def test_join_requires_name_and_background(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    client = TestClient(oRPG.app)
+
+    # missing name
+    resp = client.post("/join", json={"name": "", "background": "hero"})
+    assert resp.status_code == 400
+    assert g.players == {}
+    assert g.host_id is None
+
+    # missing background
+    resp2 = client.post("/join", json={"name": "Alice", "background": ""})
+    assert resp2.status_code == 400
+    assert g.players == {}
+    assert g.host_id is None
