@@ -36,3 +36,31 @@ def test_resolve_requires_host(monkeypatch):
     assert resp2.status_code == 200
     assert resp2.json()["ok"] is True
     assert called["flag"] is True
+
+
+def test_resolve_allows_anyone_when_enabled(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    other = oRPG.Player("Other", "member", 1.0, [])
+    g.players = {host.id: host, other.id: other}
+    g.host_id = host.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", True)
+
+    called = {"flag": False}
+
+    async def fake_do_resolution():
+        called["flag"] = True
+
+    monkeypatch.setattr(oRPG, "do_resolution", fake_do_resolution)
+
+    client = TestClient(oRPG.app)
+
+    # non-host can resolve when allowed
+    resp = client.post("/resolve", json={"player_id": other.id})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert called["flag"] is True
