@@ -1,6 +1,6 @@
 # oRPG
 
-Ollama Fantasy Party Server is a small FastAPI application that turns a local LLM into a cooperative, turn-based text adventure. Players join with a name and backstory, receive an archetype and abilities, and submit actions that the AI resolves into the next scene.
+Ollama online RPG  is a small FastAPI application that turns a local LLM into a cooperative, turn-based text adventure. Players join with a name and backstory, receive an archetype and abilities, and submit actions that the AI resolves into the next scene.
 
 ## Features
 
