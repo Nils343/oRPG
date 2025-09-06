@@ -89,3 +89,27 @@ def test_resolve_rejects_when_already_resolving(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["status"] == "already resolving"
     assert called["flag"] is False
+
+
+def test_resolve_updates_last_seen(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    host.last_seen = 0
+    g.players = {host.id: host}
+    g.host_id = host.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", False)
+
+    async def fake_do_resolution():
+        pass
+
+    monkeypatch.setattr(oRPG, "do_resolution", fake_do_resolution)
+
+    client = TestClient(oRPG.app)
+    resp = client.post("/resolve", json={"player_id": host.id})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert host.last_seen > 0
