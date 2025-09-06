@@ -240,6 +240,23 @@ async def submit_action(req: Request):
     GAME.players[pid].last_seen = time.time()
     return {"ok": True}
 
+@app.post("/leave")
+async def leave(req: Request):
+    data = await req.json()
+    pid = data.get("player_id")
+    if not pid or pid not in GAME.players:
+        return JSONResponse({"error": "Invalid player."}, status_code=400)
+
+    GAME.current_actions.pop(pid, None)
+    departing_host = pid == GAME.host_id
+    del GAME.players[pid]
+
+    if departing_host:
+        active = GAME.active_players()
+        GAME.host_id = active[0].id if active else None
+
+    return {"ok": True}
+
 @app.post("/resolve")
 async def resolve_turn(req: Request):
     if GAME.resolving:
@@ -424,6 +441,7 @@ footer{margin-top:20px;color:#7b8b9b}
           <button id="submitBtn" onclick="submitAction()">Submit / Update</button>
           <button class="secondary" onclick="clearAction()">Clear</button>
           <button id="resolveBtn" class="secondary" style="display:none" onclick="resolveNow()">Resolve turn</button>
+          <button id="leaveBtn" class="secondary" onclick="leaveGame()">Leave game</button>
         </div>
       </section>
 
@@ -599,6 +617,25 @@ async function clearAction(){
     refresh();
   }finally{
     busy(false);
+  }
+}
+
+async function leaveGame(){
+  if(!S.player_id) return;
+  btnBusy("leaveBtn", true, "Leaving...");
+  busy(true);
+  try{
+    await api("/leave", {method:"POST", body: JSON.stringify({player_id: S.player_id})});
+  }catch(e){
+    console.warn(e);
+  }finally{
+    S.player_id = "";
+    localStorage.removeItem("player_id");
+    show("join", true);
+    show("game", false);
+    busy(false);
+    btnBusy("leaveBtn", false);
+    refresh();
   }
 }
 
