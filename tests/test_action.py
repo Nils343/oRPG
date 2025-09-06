@@ -30,3 +30,17 @@ def test_submit_action_requires_valid_player():
 
     resp = client.post("/action", json={"player_id": "bogus", "text": "hi"})
     assert resp.status_code == 400
+
+
+def test_submit_action_updates_last_seen(monkeypatch):
+    g = oRPG.Game()
+    player = oRPG.Player("Alice", "hero", 1.0, [])
+    player.last_seen = 0
+    g.players = {player.id: player}
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+
+    resp = client.post("/action", json={"player_id": player.id, "text": "attack"})
+    assert resp.status_code == 200
+    assert player.last_seen > 0
