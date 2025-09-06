@@ -365,6 +365,7 @@ button.secondary{background:#0f141b;border:1px solid #203044}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .small{font-size:12px;color:var(--muted)}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#12202f;color:#a7c6e6;border:1px solid #1e3146;font-size:12px}
+.badge.you{background:var(--accent2);color:#000;border-color:var(--accent2)}
 #scenario{white-space:pre-wrap}
 ul{padding-left:18px;margin:8px 0}
 hr{border:0;border-top:1px solid #1d2733;margin:12px 0}
@@ -505,8 +506,9 @@ function render(state){
   if(me && !S.actionDirty) qs("action").value = state.your_action || "";
 
   qs("party").innerHTML = (state.party||[]).map(p => {
+    const you = p.id === S.player_id ? ' <span class="badge you">you</span>' : '';
     return `<div class="row" style="justify-content:space-between">
-      <div>${p.name}</div>
+      <div>${p.name}${you}</div>
       <div class="small">${p.archetype} <span class="badge">${p.power}×</span></div>
     </div>`;
   }).join("") || "<div class='small'>(empty)</div>";
