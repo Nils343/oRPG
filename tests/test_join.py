@@ -1,0 +1,43 @@
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
+
+import oRPG
+from fastapi.testclient import TestClient
+
+
+def test_join_requires_code_and_sets_host(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "secret")
+
+    called = {"flag": False}
+
+    async def fake_initial_scene():
+        called["flag"] = True
+        g.turn_number = 1
+        g.current_scenario = "intro"
+
+    monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+
+    client = TestClient(oRPG.app)
+
+    # invalid join code should be rejected
+    resp = client.post("/join", json={"name": "Alice", "background": "brave warrior", "code": "wrong"})
+    assert resp.status_code == 403
+    assert called["flag"] is False
+    assert g.host_id is None
+
+    # valid join code allows joining and sets host
+    resp = client.post("/join", json={"name": "Alice", "background": "brave warrior", "code": "secret"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert g.host_id == data["player_id"]
+    assert called["flag"] is True
+
+    # subsequent joins do not change host or call initial scene again
+    called["flag"] = False
+    resp2 = client.post("/join", json={"name": "Bob", "background": "sneaky rogue", "code": "secret"})
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert g.host_id != data2["player_id"]
+    assert called["flag"] is False
