@@ -452,11 +452,15 @@ const S = {
   name: localStorage.getItem("name") || "",
   pollMs: 2000,
   joinCodeRequired: false,
-  canResolve: false
+  canResolve: false,
+  actionDirty: false,
+  lastTurn: 0
 };
 
 function qs(id){return document.getElementById(id)}
 function show(id, v){qs(id).style.display = v ? "" : "none"}
+
+qs("action").addEventListener("input", () => { S.actionDirty = true; });
 
 async function api(path, opts={}){
   const r = await fetch(path, Object.assign({headers: {"Content-Type":"application/json"}}, opts));
@@ -492,8 +496,13 @@ function render(state){
   S.canResolve = state.can_resolve;
   show("resolveBtn", !!S.canResolve);
 
+  if(state.turn !== undefined && state.turn !== S.lastTurn){
+    S.lastTurn = state.turn;
+    S.actionDirty = false;
+  }
+
   const me = S.player_id;
-  if(me) qs("action").value = state.your_action || "";
+  if(me && !S.actionDirty) qs("action").value = state.your_action || "";
 
   qs("party").innerHTML = (state.party||[]).map(p => {
     return `<div class="row" style="justify-content:space-between">
@@ -529,6 +538,7 @@ async function submitAction(){
   if(!S.player_id){ alert("Join first!"); return; }
   const text = qs("action").value;
   await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
+  S.actionDirty = false;
   refresh();
 }
 
@@ -536,6 +546,7 @@ async function clearAction(){
   if(!S.player_id) return;
   await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text: ""})});
   qs("action").value = "";
+  S.actionDirty = false;
   refresh();
 }
 
