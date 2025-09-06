@@ -182,7 +182,7 @@ async def get_state(player_id: Optional[str] = None):
     active = GAME.active_players()
     you = GAME.players.get(player_id) if player_id else None
     is_host = bool(you and GAME.host_id == you.id)   # <— NEW
-#    your_action = GAME.current_actions.get(player_id, "") if player_id else ""
+    your_action = GAME.current_actions.get(player_id, "") if player_id else ""
     return {
         "turn": GAME.turn_number,
         "scenario": GAME.current_scenario,
@@ -217,6 +217,8 @@ async def join(req: Request):
 
     p = Player(name, background, power, abilities)
     GAME.players[p.id] = p
+    if GAME.host_id is None:
+        GAME.host_id = p.id
 
     # if this is the first player, spin up an initial scene (lock-protected)
     if GAME.turn_number == 0 and not GAME.current_scenario:
