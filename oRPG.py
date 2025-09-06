@@ -399,7 +399,7 @@ footer{margin-top:20px;color:#7b8b9b}
       <textarea id="background" placeholder="Who are you, what shaped you, why are you adventuring?"></textarea>
     </div>
     <div class="row" style="margin-top:10px">
-      <button onclick="doJoin()">Enter the world</button>
+      <button id="joinBtn" onclick="doJoin()">Enter the world</button>
       <div class="small">Your power/abilities will auto-balance to the party.</div>
     </div>
   </div>
@@ -421,7 +421,7 @@ footer{margin-top:20px;color:#7b8b9b}
         <label>Your action this turn</label>
         <textarea id="action" placeholder="Describe what your character attempts… (you can edit until the turn resolves)"></textarea>
         <div class="row" style="margin-top:8px">
-          <button onclick="submitAction()">Submit / Update</button>
+          <button id="submitBtn" onclick="submitAction()">Submit / Update</button>
           <button class="secondary" onclick="clearAction()">Clear</button>
           <button id="resolveBtn" class="secondary" style="display:none" onclick="resolveNow()">Resolve turn</button>
         </div>
@@ -472,6 +472,22 @@ function busy(on){
   S.pendingOps += on ? 1 : -1;
   if(S.pendingOps < 0) S.pendingOps = 0;
   updateBusy();
+}
+
+function btnBusy(id, on, txt){
+  const b = qs(id);
+  if(!b) return;
+  if(on){
+    b.dataset.orig = b.textContent;
+    if(txt) b.textContent = txt;
+    b.disabled = true;
+  }else{
+    if(b.dataset.orig !== undefined){
+      b.textContent = b.dataset.orig;
+      delete b.dataset.orig;
+    }
+    b.disabled = false;
+  }
 }
 
 qs("action").addEventListener("input", () => { S.actionDirty = true; });
@@ -541,6 +557,7 @@ async function doJoin(){
   const background = qs("background").value.trim();
   const code = qs("joinCode")?.value.trim() || "";
   if(!name || !background){ alert("Please fill in name and background."); return; }
+  btnBusy("joinBtn", true, "Entering...");
   busy(true);
   try{
     const res = await api("/join", {method:"POST", body: JSON.stringify({name, background, code})});
@@ -553,12 +570,14 @@ async function doJoin(){
     alert("Join failed: " + e.message);
   }finally{
     busy(false);
+    btnBusy("joinBtn", false);
   }
 }
 
 async function submitAction(){
   if(!S.player_id){ alert("Join first!"); return; }
   const text = qs("action").value;
+  btnBusy("submitBtn", true, "Submitting...");
   busy(true);
   try{
     await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
@@ -566,6 +585,7 @@ async function submitAction(){
     refresh();
   }finally{
     busy(false);
+    btnBusy("submitBtn", false);
   }
 }
 
@@ -584,6 +604,7 @@ async function clearAction(){
 
 async function resolveNow(){
   if(!S.canResolve){ alert("Resolving is disabled by host."); return; }
+  btnBusy("resolveBtn", true, "Resolving...");
   busy(true);
   try{
     show("resolving", true);
@@ -593,6 +614,7 @@ async function resolveNow(){
   }finally{
     show("resolving", false);
     busy(false);
+    btnBusy("resolveBtn", false);
     refresh();
   }
 }
