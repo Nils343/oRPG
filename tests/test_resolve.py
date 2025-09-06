@@ -1,0 +1,38 @@
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
+
+import oRPG
+from fastapi.testclient import TestClient
+
+
+def test_resolve_requires_host(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    other = oRPG.Player("Other", "member", 1.0, [])
+    g.players = {host.id: host, other.id: other}
+    g.host_id = host.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", False)
+
+    called = {"flag": False}
+
+    async def fake_do_resolution():
+        called["flag"] = True
+
+    monkeypatch.setattr(oRPG, "do_resolution", fake_do_resolution)
+
+    client = TestClient(oRPG.app)
+
+    # non-host cannot resolve
+    resp = client.post("/resolve", json={"player_id": other.id})
+    assert resp.status_code == 403
+    assert called["flag"] is False
+
+    # host can resolve
+    resp2 = client.post("/resolve", json={"player_id": host.id})
+    assert resp2.status_code == 200
+    assert resp2.json()["ok"] is True
+    assert called["flag"] is True
