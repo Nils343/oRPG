@@ -3,6 +3,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
 import oRPG
 from fastapi.testclient import TestClient
+from tests.conftest import assert_last_seen_updates
 
 
 def test_submit_action_stores_truncates_and_clears(monkeypatch):
@@ -35,12 +36,10 @@ def test_submit_action_requires_valid_player():
 def test_submit_action_updates_last_seen(monkeypatch):
     g = oRPG.Game()
     player = oRPG.Player("Alice", "hero", 1.0, [])
-    player.last_seen = 0
     g.players = {player.id: player}
     monkeypatch.setattr(oRPG, "GAME", g)
 
     client = TestClient(oRPG.app)
-
-    resp = client.post("/action", json={"player_id": player.id, "text": "attack"})
-    assert resp.status_code == 200
-    assert player.last_seen > 0
+    assert_last_seen_updates(
+        client, player, "post", "/action", json={"player_id": player.id, "text": "attack"}
+    )

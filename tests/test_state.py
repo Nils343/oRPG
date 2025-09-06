@@ -3,6 +3,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
 import oRPG
 from fastapi.testclient import TestClient
+from tests.conftest import assert_last_seen_updates
 
 
 def test_state_includes_flags_and_updates_last_seen(monkeypatch):
@@ -22,25 +23,22 @@ def test_state_includes_flags_and_updates_last_seen(monkeypatch):
 
     client = TestClient(oRPG.app)
 
-    host.last_seen = 0
-    resp = client.get("/state", params={"player_id": host.id})
-    assert resp.status_code == 200
+    resp = assert_last_seen_updates(
+        client, host, "get", "/state", params={"player_id": host.id}
+    )
     data = resp.json()
     assert data["is_host"] is True
     assert data["your_action"] == "look"
     assert data["can_resolve"] is True
     assert data["join_code_required"] is True
-    assert host.last_seen > 0
-
-    other.last_seen = 0
-    resp2 = client.get("/state", params={"player_id": other.id})
-    assert resp2.status_code == 200
+    resp2 = assert_last_seen_updates(
+        client, other, "get", "/state", params={"player_id": other.id}
+    )
     data2 = resp2.json()
     assert data2["is_host"] is False
     assert data2["your_action"] == "hide"
     assert data2["can_resolve"] is False
     assert data2["join_code_required"] is True
-    assert other.last_seen > 0
 
 def test_state_can_resolve_when_anyone_allowed(monkeypatch):
     g = oRPG.Game()
