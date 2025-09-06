@@ -41,3 +41,21 @@ def test_state_includes_flags_and_updates_last_seen(monkeypatch):
     assert data2["can_resolve"] is False
     assert data2["join_code_required"] is True
     assert other.last_seen > 0
+
+def test_state_can_resolve_when_anyone_allowed(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    other = oRPG.Player("Other", "member", 1.0, [])
+    g.players = {host.id: host, other.id: other}
+    g.host_id = host.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", True)
+
+    client = TestClient(oRPG.app)
+    resp = client.get("/state", params={"player_id": other.id})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["can_resolve"] is True
