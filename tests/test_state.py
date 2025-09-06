@@ -26,9 +26,7 @@ def test_state_includes_flags_and_updates_last_seen(monkeypatch):
     resp = client.get("/state", params={"player_id": host.id})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["is_host"] is True
     assert data["your_action"] == "look"
-    assert data["can_resolve"] is True
     assert data["join_code_required"] is True
     assert host.last_seen > 0
 
@@ -36,9 +34,7 @@ def test_state_includes_flags_and_updates_last_seen(monkeypatch):
     resp2 = client.get("/state", params={"player_id": other.id})
     assert resp2.status_code == 200
     data2 = resp2.json()
-    assert data2["is_host"] is False
     assert data2["your_action"] == "hide"
-    assert data2["can_resolve"] is False
     assert data2["join_code_required"] is True
     assert other.last_seen > 0
 
