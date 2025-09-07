@@ -57,3 +57,16 @@ def test_submit_action_trims_and_updates_last_seen(monkeypatch):
         client, player, "post", "/action", json={"player_id": player.id, "text": long_text}
     )
     assert g.current_actions[player.id] == "x" * 500
+
+    
+def test_post_action_empty_text_clears_action(monkeypatch):
+    g = oRPG.Game()
+    player = oRPG.Player("Alice", "hero", 1.0, [])
+    g.players = {player.id: player}
+    g.current_actions[player.id] = "attack"
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    resp = client.post("/action", json={"player_id": player.id, "text": ""})
+    assert resp.status_code == 200
+    assert player.id not in g.current_actions
