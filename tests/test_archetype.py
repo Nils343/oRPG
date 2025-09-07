@@ -21,6 +21,13 @@ def test_archetype_for_background(bg, expected):
     assert archetype_for_background(bg) == expected
 
 
+@pytest.mark.parametrize("bg", ["RANGER", "HUNTER", "ARCHER"])
+
+
+def test_ranger_synonyms_case_insensitive(bg):
+    assert archetype_for_background(bg) == "Ranger"
+
+    
 @pytest.mark.parametrize(
     "bg",
     [
