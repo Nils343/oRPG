@@ -13,6 +13,7 @@ from oRPG import archetype_for_background
     ("Devout priest spreading light", "Cleric"),
     ("BARBARIAN warrior of the north", "Warrior"),
     ("A simple farmer with no special training", "Adventurer"),
+    ("", "Adventurer"),
 ])
 def test_archetype_for_background(bg, expected):
     assert archetype_for_background(bg) == expected
