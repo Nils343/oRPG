@@ -1,6 +1,8 @@
 import sys, pathlib
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
+import time
+
 import oRPG
 from fastapi.testclient import TestClient
 from tests.conftest import assert_last_seen_updates
@@ -149,6 +151,27 @@ def test_state_without_player_id_returns_public_info(monkeypatch):
     assert data["resolving"] is True
     assert data["join_code_required"] is True
     assert data["can_resolve"] is True
+
+
+def test_state_party_excludes_stale_players(monkeypatch):
+    g = oRPG.Game()
+    recent = oRPG.Player("Recent", "active", 1.0, [])
+    stale = oRPG.Player("Stale", "inactive", 1.0, [])
+    g.players = {recent.id: recent, stale.id: stale}
+
+    now = time.time()
+    recent.last_seen = now
+    stale.last_seen = now - 601
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    resp = client.get("/state", params={"player_id": recent.id})
+    assert resp.status_code == 200
+    party = resp.json()["party"]
+    ids = [p["id"] for p in party]
+    assert recent.id in ids
+    assert stale.id not in ids
     assert data["is_host"] is False
 
 
