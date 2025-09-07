@@ -12,3 +12,4 @@ def test_root_returns_single_page_html():
     assert resp.headers["content-type"].startswith("text/html")
     assert "<!doctype html>" in resp.text.lower()
     assert "Ollama Fantasy Party" in resp.text
+    assert "⚔️ Ollama Fantasy Party" in resp.text
