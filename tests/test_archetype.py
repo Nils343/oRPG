@@ -13,7 +13,10 @@ from oRPG import archetype_for_background
     ("Devout priest spreading light", "Cleric"),
     ("BARBARIAN warrior of the north", "Warrior"),
     ("A simple farmer with no special training", "Adventurer"),
+    ("", "Adventurer"),
 ])
+
+
 def test_archetype_for_background(bg, expected):
     assert archetype_for_background(bg) == expected
 
@@ -27,5 +30,15 @@ def test_archetype_for_background(bg, expected):
         "sPy gathering intel",
     ],
 )
+
+
 def test_archetype_stealth_keywords(bg):
     assert archetype_for_background(bg) == "Rogue"
+        "A wandering MAGE seeking knowledge",
+        "The wise wizard of the north",
+        "An enigmatic SoRcErEr's apprentice",
+        "Escaped WARLOCK with a secret",
+    ],
+)
+def test_spellcaster_keywords_map_to_mage(bg):
+    assert archetype_for_background(bg) == "Mage"
