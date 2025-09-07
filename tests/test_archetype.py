@@ -16,3 +16,16 @@ from oRPG import archetype_for_background
 ])
 def test_archetype_for_background(bg, expected):
     assert archetype_for_background(bg) == expected
+
+
+@pytest.mark.parametrize(
+    "bg",
+    [
+        "A wandering MAGE seeking knowledge",
+        "The wise wizard of the north",
+        "An enigmatic SoRcErEr's apprentice",
+        "Escaped WARLOCK with a secret",
+    ],
+)
+def test_spellcaster_keywords_map_to_mage(bg):
+    assert archetype_for_background(bg) == "Mage"
