@@ -108,6 +108,29 @@ def test_join_power_averages_active_players(monkeypatch):
     assert new_player.power != (1.2 + 0.8 + 10.0) / 3
 
 
+def test_join_assigns_abilities_based_on_background(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    async def fake_initial_scene():
+        g.turn_number = 1
+        g.current_scenario = "intro"
+
+    monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+
+    client = TestClient(oRPG.app)
+    bg = "Cunning thief from the city"
+    resp = client.post("/join", json={"name": "Sneak", "background": bg})
+    assert resp.status_code == 200
+    pid = resp.json()["player_id"]
+    player = g.players[pid]
+
+    arche = oRPG.archetype_for_background(bg)
+    expected = oRPG.abilities_for_archetype(arche, player.power, bg)
+    assert player.abilities == expected
+
+    
 def test_join_power_matches_single_active_player(monkeypatch):
     g = oRPG.Game()
     now = time.time()
