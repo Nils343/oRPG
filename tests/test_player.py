@@ -13,3 +13,16 @@ def test_player_initialization_truncates_and_rounds():
     assert p.background == "B" * 400
     assert p.power == 1.24
     assert len(p.abilities) == 5
+
+
+def test_player_char_class_truncation_and_strip():
+    long_class = "  " + ("C" * 45) + "  "
+    p = Player("Alice", "bg", 1.0, [], char_class=long_class)
+    assert p.char_class == "C" * 40
+
+
+def test_player_time_fields_are_ordered():
+    p = Player("Alice", "bg", 1.0, [])
+    import time as _time
+    now = _time.time()
+    assert p.joined_at <= p.last_seen <= now

@@ -9,24 +9,30 @@ def test_party_snapshot_formats_and_handles_empty():
     assert oRPG.party_snapshot([]) == "(no one yet)"
 
     # populated party formatting
-    p1 = oRPG.Player("Alice", "brave warrior", 1.0, ["Slash", "Shield Bash"])
-    p2 = oRPG.Player("Bob", "stealthy rogue", 0.9, ["Sneak", "Backstab"])
+    p1 = oRPG.Player("Alice", "brave warrior", 1.0, ["Slash", "Shield Bash"], char_class="Warrior")
+    p2 = oRPG.Player("Bob", "stealthy rogue", 0.9, ["Sneak", "Backstab"], char_class="Rogue")
     result = oRPG.party_snapshot([p1, p2])
     expected = (
-        f"- {p1.name} ({p1.power}x power) – Warrior; Abilities: Slash, Shield Bash\n"
-        f"- {p2.name} ({p2.power}x power) – Rogue; Abilities: Sneak, Backstab"
+        f"- {p1.name} ({p1.power}x power) - Warrior; Abilities: Slash, Shield Bash\n"
+        f"- {p2.name} ({p2.power}x power) - Rogue; Abilities: Sneak, Backstab"
     )
     assert result == expected
 
 
 def test_party_snapshot_includes_all_player_details():
     players = [
-        oRPG.Player("Cara", "pious cleric", 1.2, ["Heal", "Bless"]),
-        oRPG.Player("Dan", "keen ranger", 0.8, ["Track", "Ambush"]),
+        oRPG.Player("Cara", "pious cleric", 1.2, ["Heal", "Bless"], char_class="Cleric"),
+        oRPG.Player("Dan", "keen ranger", 0.8, ["Track", "Ambush"], char_class="Ranger"),
     ]
     lines = oRPG.party_snapshot(players).splitlines()
     for line, p in zip(lines, players):
         assert p.name in line
         assert f"{p.power}x power" in line
-        assert oRPG.archetype_for_background(p.background) in line
+        assert p.char_class in line
         assert ", ".join(p.abilities) in line
+
+
+def test_party_snapshot_handles_empty_class():
+    p = oRPG.Player("Eve", "mystery", 1.0, ["Observe"], char_class="")
+    line = oRPG.party_snapshot([p])
+    assert line == f"- {p.name} ({p.power}x power) - ; Abilities: Observe"

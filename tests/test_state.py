@@ -10,8 +10,8 @@ from tests.conftest import assert_last_seen_updates
 
 def test_state_includes_flags_and_updates_last_seen(monkeypatch):
     g = oRPG.Game()
-    host = oRPG.Player("Host", "leader", 1.0, [])
-    other = oRPG.Player("Other", "member", 1.0, [])
+    host = oRPG.Player("Host", "leader", 1.0, [], char_class="Leader")
+    other = oRPG.Player("Other", "member", 1.0, [], char_class="Member")
     g.players = {host.id: host, other.id: other}
     g.host_id = host.id
     g.turn_number = 1
@@ -41,8 +41,8 @@ def test_state_includes_flags_and_updates_last_seen(monkeypatch):
 
 def test_state_can_resolve_when_anyone_allowed(monkeypatch):
     g = oRPG.Game()
-    host = oRPG.Player("Host", "leader", 1.0, [])
-    other = oRPG.Player("Other", "member", 1.0, [])
+    host = oRPG.Player("Host", "leader", 1.0, [], char_class="Leader")
+    other = oRPG.Player("Other", "member", 1.0, [], char_class="Member")
     g.players = {host.id: host, other.id: other}
     g.host_id = host.id
     g.turn_number = 1
@@ -64,8 +64,8 @@ def test_state_can_resolve_when_anyone_allowed(monkeypatch):
 
 def test_state_only_host_can_resolve_when_anyone_disallowed(monkeypatch):
     g = oRPG.Game()
-    host = oRPG.Player("Host", "leader", 1.0, [])
-    other = oRPG.Player("Other", "member", 1.0, [])
+    host = oRPG.Player("Host", "leader", 1.0, [], char_class="Leader")
+    other = oRPG.Player("Other", "member", 1.0, [], char_class="Member")
     g.players = {host.id: host, other.id: other}
     g.host_id = host.id
     g.turn_number = 1
@@ -87,8 +87,8 @@ def test_state_only_host_can_resolve_when_anyone_disallowed(monkeypatch):
 
 def test_state_marks_host_flag(monkeypatch):
     g = oRPG.Game()
-    host = oRPG.Player("Host", "leader", 1.0, [])
-    other = oRPG.Player("Other", "member", 1.0, [])
+    host = oRPG.Player("Host", "leader", 1.0, [], char_class="Leader")
+    other = oRPG.Player("Other", "member", 1.0, [], char_class="Member")
     g.players = {host.id: host, other.id: other}
     g.host_id = host.id
 
@@ -109,8 +109,8 @@ def test_state_marks_host_flag(monkeypatch):
 
 def test_state_without_player_id_returns_public_info(monkeypatch):
     g = oRPG.Game()
-    host = oRPG.Player("Host", "leader", 1.0, [])
-    other = oRPG.Player("Other", "member", 1.0, [])
+    host = oRPG.Player("Host", "leader", 1.0, [], char_class="Leader")
+    other = oRPG.Player("Other", "member", 1.0, [], char_class="Member")
     g.players = {host.id: host, other.id: other}
     g.host_id = host.id
     g.turn_number = 1
@@ -137,13 +137,13 @@ def test_state_without_player_id_returns_public_info(monkeypatch):
             "id": host.id,
             "name": host.name,
             "power": host.power,
-            "archetype": oRPG.archetype_for_background(host.background),
+            "archetype": host.char_class,
         },
         {
             "id": other.id,
             "name": other.name,
             "power": other.power,
-            "archetype": oRPG.archetype_for_background(other.background),
+            "archetype": other.char_class,
         },
     ]
     assert party == expected_party
@@ -155,8 +155,8 @@ def test_state_without_player_id_returns_public_info(monkeypatch):
 
 def test_state_can_resolve_reflects_runtime_toggle(monkeypatch):
     g = oRPG.Game()
-    host = oRPG.Player("Host", "leader", 1.0, [])
-    other = oRPG.Player("Other", "member", 1.0, [])
+    host = oRPG.Player("Host", "leader", 1.0, [], char_class="Leader")
+    other = oRPG.Player("Other", "member", 1.0, [], char_class="Member")
     g.players = {host.id: host, other.id: other}
     g.host_id = host.id
     g.turn_number = 1

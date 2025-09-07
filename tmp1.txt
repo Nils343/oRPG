@@ -1,0 +1,260 @@
+import os
+import uuid
+import time
+import json
+import asyncio
+from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
+import httpx
+
+# -----------------------------
+# Config
+# -----------------------------
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")      # change if you prefer another local model
+JOIN_CODE = os.getenv("JOIN_CODE", "").strip()            # optional: require a code to join
+ALLOW_ANYONE_TO_RESOLVE = os.getenv("ALLOW_ANYONE_TO_RESOLVE", "1") == "1"
+
+BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
+BIND_PORT = int(os.getenv("BIND_PORT", "8000"))
+
+# -----------------------------
+# Minimal in-memory game state
+# -----------------------------
+class Player:
+    def __init__(self, name: str, background: str, power: float, abilities: List[str], char_class: Optional[str] = None):
+        self.id = str(uuid.uuid4())
+        self.name = name.strip()[:40]
+        self.background = background.strip()[:400]
+        self.power = round(power, 2)
+        self.abilities = abilities[:5]
+        self.char_class = (char_class or "").strip()[:40]
+        self.joined_at = time.time()
+        self.last_seen = time.time()
+
+class Game:
+    def __init__(self):
+        self.players: Dict[str, Player] = {}
+        self.turn_number: int = 0
+        self.current_scenario: Optional[str] = None
+        self.current_actions: Dict[str, str] = {}
+        self.last_summary: str = ""
+        self.history: List[Dict] = []
+        self.resolving: bool = False
+        self.lock = asyncio.Lock()
+        self.host_id: Optional[str] = None   # <— NEW
+
+
+    def active_players(self, stale_seconds: int = 600) -> List[Player]:
+        now = time.time()
+        return [p for p in self.players.values() if now - p.last_seen < stale_seconds]
+
+GAME = Game()
+app = FastAPI(title="Ollama Fantasy Party Server")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# -----------------------------
+# Helpers
+# -----------------------------
+async def choose_class_with_ollama(background: str, max_attempts: int = 5) -> str:
+    """Use Ollama to choose a fitting character class based on the player's background.
+    Constraints:
+    - Return at most two words.
+    - If Ollama returns more than two words, ask again (up to max_attempts),
+      tightening instructions. Finally, fall back to the first two words.
+    - Do not rely on any predefined class list.
+    """
+    bg = (background or "").strip()
+    system = (
+        "You assign concise fantasy character classes based on a short background. "
+        "Return only the class name. Keep it to at most two words. "
+        "No punctuation, no explanations."
+    )
+    user_tmpl = (
+        "Background: {bg}\n\n"
+        "Task: Name a fitting fantasy character class (max two words).\n"
+        "Respond with ONLY the class name, no quotes."
+    )
+
+    attempts = 0
+    last = ""
+    while attempts < max_attempts:
+        attempts += 1
+        content = await ollama_chat([
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_tmpl.format(bg=bg)}
+        ], options={"temperature": 0.3, "num_ctx": 1024})
+        # normalize
+        text = (content or "").strip()
+        # remove surrounding quotes/backticks and punctuation-only decorations
+        text = text.replace("\n", " ").replace("\r", " ")
+        text = " ".join(text.split())
+        # words by whitespace
+        words = text.split(" ") if text else []
+        # sometimes models prefix with labels; strip common prefixes
+        if len(words) >= 2 and words[0].lower().rstrip(":") in {"class", "archetype", "role"}:
+            words = words[1:]
+        # keep only alphanumeric/hyphen words
+        cleaned = []
+        for w in words:
+            w2 = "".join(ch for ch in w if ch.isalnum() or ch in "-'")
+            if w2:
+                cleaned.append(w2)
+        if not cleaned:
+            last = text
+            continue
+        if len(cleaned) <= 2:
+            return " ".join(cleaned)[:40]
+        # ask again with stricter instruction
+        last = " ".join(cleaned)
+        user_tmpl = (
+            "Background: {bg}\n\n"
+            "Task: Output ONLY a class name of one or two words. "
+            "If you think of more than two, choose the best two-word version. "
+            "Absolutely no extra words."
+        )
+    # fallback: trim to first two words if still non-compliant
+    trimmed = " ".join((last or bg or "Adventurer").split()[:2])
+    return trimmed[:40]
+def abilities_for_class(char_class: str, power: float, bg: str) -> List[str]:
+    """Derive simple, generic abilities without relying on predefined class lists.
+    - First ability reflects a tier based on relative power.
+    - Abilities are generic and class-agnostic to avoid predefined catalogs.
+    - Last ability is a 'Signature' flavored by the first line of background.
+    """
+    tier = "Novice" if power < 0.95 else ("Seasoned" if power < 1.05 else "Expert")
+    class_token = (char_class or "Class").splitlines()[0][:20]
+    base = [
+        f"{tier} {class_token} Techniques".strip(),
+        "Resourcefulness",
+        "Adaptability",
+    ]
+    flavored = base + [f"Signature: {bg.splitlines()[0][:60]}"]
+    return flavored[:4]
+def party_snapshot(players: List[Player]) -> str:
+    if not players:
+        return "(no one yet)"
+    lines = []
+    for p in players:
+        cls = p.char_class or ""
+        lines.append(f"- {p.name} ({p.power}x power) - {cls}; Abilities: {', '.join(p.abilities)}")
+    return "\n".join(lines)
+def actions_snapshot(actions: Dict[str, str]) -> str:
+    if not actions:
+        return "(no actions submitted)"
+    lines = []
+    for pid, text in actions.items():
+        p = GAME.players.get(pid)
+        who = p.name if p else pid[:8]
+        lines.append(f"- {who}: {text.strip()}")
+    return "\n".join(lines)
+
+async def ollama_chat(messages: List[Dict[str, str]], options: Optional[Dict]=None) -> str:
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+    }
+    if options:
+        payload["options"] = options
+    url = f"{OLLAMA_HOST}/api/chat"
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        return data.get("message", {}).get("content", "").strip()
+
+GM_SYSTEM_PROMPT = """You are the Game Master (GM) for a cooperative, turn-based fantasy text adventure played in a browser.
+Write vivid but concise scenes (max ~200 words). Always end your output with: "— What do you do?"
+Adhere to continuity using the 'Summary of Facts'. Respect the party roster and their abilities/power.
+No dice mechanics; narrate plausible outcomes. Avoid railroading; present meaningful choices.
+"""
+
+def initial_scene_user_message(summary: str, party: str) -> str:
+    return f"""START A NEW SCENE.
+
+Summary of Facts (carry forward if useful):
+{summary or "(none)"}
+
+Party Roster:
+{party}
+
+Write an opening situation that puts the party together with a clear immediate problem, hooks, and sensory details.
+Do NOT spoil future events. 150–200 words.
+End with: "— What do you do?" """
+
+def resolution_user_message(summary: str, party: str, scenario: str, actions: str) -> str:
+    return f"""RESOLVE THE PARTY'S ACTIONS AND SET UP THE NEXT SITUATION.
+
+Summary of Facts:
+{summary or "(none)"}
+
+Previous Scene:
+{scenario}
+
+Party Roster:
+{party}
+
+Actions Taken This Turn:
+{actions}
+
+Task:
+1) Narrate the outcomes as a cohesive scene (<=200 words).
+2) Immediately set up the next situation and end with "— What do you do?"
+
+Avoid bullet lists; write natural narration. Keep momentum; reflect abilities and risks realistically."""
+
+SUMMARIZER_SYSTEM = "You are an expert note-taker for an ongoing fantasy campaign."
+SUMMARIZER_USER_TMPL = """Update the compact 'Summary of Facts' for the next turn.
+
+Prior Summary:
+{prior}
+
+Newest Narration:
+{narr}
+
+Produce 8–12 concise bullet points including locations, NPCs, goals, party condition, important items, and open threads.
+Keep it under ~180 words. """
+
+# -----------------------------
+# Routes
+# -----------------------------
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return HTML_PAGE
+
+@app.get("/state")
+async def get_state(player_id: Optional[str] = None):
+    # heartbeat for presence
+    if player_id and player_id in GAME.players:
+        GAME.players[player_id].last_seen = time.time()
+
+    active = GAME.active_players()
+    you = GAME.players.get(player_id) if player_id else None
+    is_host = bool(you and GAME.host_id == you.id)   # <— NEW
+    your_action = GAME.current_actions.get(player_id, "") if player_id else ""
+    return {
+        "turn": GAME.turn_number,
+        "scenario": GAME.current_scenario,
+        "summary": GAME.last_summary,
+        "party": [{"id": p.id, "name": p.name, "power": p.power, "archetype": (p.char_class or "")} for p in active],
+        "your_action": your_action,
+        "actions_submitted": len(GAME.current_actions),
+        "resolving": GAME.resolving,
+        "can_resolve": ALLOW_ANYONE_TO_RESOLVE or is_host,
+        "join_code_required": bool(JOIN_CODE),
+        "is_host": is_host,
+    }
+
+@app.post("/join")
+async def join(req: Request):
+    data = await req.json()
+    name = (data.get("name") or "").strip()
+    background = (data.get("background") or "").strip()
+    code = (data.get("code") or "").strip()
+
+    if not name or not background:
+        return JSONResponse({"error": "Name and background are required."}, status_code=400)

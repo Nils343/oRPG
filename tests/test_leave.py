@@ -91,3 +91,23 @@ def test_leave_invalid_player(monkeypatch):
     # Ensure state unchanged
     assert p1.id in g.players
     assert g.host_id == p1.id
+
+
+def test_leave_reassigns_host_only_from_active_players(monkeypatch):
+    g = oRPG.Game()
+    p1 = oRPG.Player("Host", "warrior", 1.0, [])
+    p2 = oRPG.Player("Stale", "rogue", 1.0, [])
+    # make p2 stale
+    now = time.time()
+    p1.last_seen = now
+    p2.last_seen = now - 601
+    g.players = {p1.id: p1, p2.id: p2}
+    g.host_id = p1.id
+    
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    resp = client.post("/leave", json={"player_id": p1.id})
+    assert resp.status_code == 200
+    # only stale remains; host should be cleared
+    assert g.host_id is None

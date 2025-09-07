@@ -25,12 +25,13 @@ BIND_PORT = int(os.getenv("BIND_PORT", "8000"))
 # Minimal in-memory game state
 # -----------------------------
 class Player:
-    def __init__(self, name: str, background: str, power: float, abilities: List[str]):
+    def __init__(self, name: str, background: str, power: float, abilities: List[str], char_class: Optional[str] = None):
         self.id = str(uuid.uuid4())
         self.name = name.strip()[:40]
         self.background = background.strip()[:400]
         self.power = round(power, 2)
         self.abilities = abilities[:5]
+        self.char_class = (char_class or "").strip()[:40]
         self.joined_at = time.time()
         self.last_seen = time.time()
 
@@ -58,37 +59,89 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # -----------------------------
 # Helpers
 # -----------------------------
-def archetype_for_background(bg: str) -> str:
-    t = bg.lower()
-    if any(k in t for k in ["mage", "wizard", "sorcer", "warlock"]): return "Mage"
-    if any(k in t for k in ["rogue", "thief", "assassin", "spy"]):   return "Rogue"
-    if any(k in t for k in ["ranger", "hunter", "archer"]):          return "Ranger"
-    if any(k in t for k in ["cleric", "priest", "paladin"]):         return "Cleric"
-    if any(k in t for k in ["barbarian", "fighter", "knight", "warrior"]): return "Warrior"
-    return "Adventurer"
+async def choose_class_with_ollama(background: str, max_attempts: int = 5) -> str:
+    """Use Ollama to choose a fitting character class based on the player's background.
+    Constraints:
+    - Return at most two words.
+    - If Ollama returns more than two words, ask again (up to max_attempts),
+      tightening instructions. Finally, fall back to the first two words.
+    - Do not rely on any predefined class list.
+    """
+    bg = (background or "").strip()
+    system = (
+        "You assign concise fantasy character classes based on a short background. "
+        "Return only the class name. Keep it to at most two words. "
+        "No punctuation, no explanations."
+    )
+    user_tmpl = (
+        "Background: {bg}\n\n"
+        "Task: Name a fitting fantasy character class (max two words).\n"
+        "Respond with ONLY the class name, no quotes."
+    )
 
-def abilities_for_archetype(arche: str, power: float, bg: str) -> List[str]:
+    attempts = 0
+    last = ""
+    while attempts < max_attempts:
+        attempts += 1
+        content = await ollama_chat([
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_tmpl.format(bg=bg)}
+        ], options={"temperature": 0.3, "num_ctx": 1024})
+        # normalize
+        text = (content or "").strip()
+        # remove surrounding quotes/backticks and punctuation-only decorations
+        text = text.replace("\n", " ").replace("\r", " ")
+        text = " ".join(text.split())
+        # words by whitespace
+        words = text.split(" ") if text else []
+        # sometimes models prefix with labels; strip common prefixes
+        if len(words) >= 2 and words[0].lower().rstrip(":") in {"class", "archetype", "role"}:
+            words = words[1:]
+        # keep only alphanumeric/hyphen words
+        cleaned = []
+        for w in words:
+            w2 = "".join(ch for ch in w if ch.isalnum() or ch in "-'")
+            if w2:
+                cleaned.append(w2)
+        if not cleaned:
+            last = text
+            continue
+        if len(cleaned) <= 2:
+            return " ".join(cleaned)[:40]
+        # ask again with stricter instruction
+        last = " ".join(cleaned)
+        user_tmpl = (
+            "Background: {bg}\n\n"
+            "Task: Output ONLY a class name of one or two words. "
+            "If you think of more than two, choose the best two-word version. "
+            "Absolutely no extra words."
+        )
+    # fallback: trim to first two words if still non-compliant
+    trimmed = " ".join((last or bg or "Adventurer").split()[:2])
+    return trimmed[:40]
+def abilities_for_class(char_class: str, power: float, bg: str) -> List[str]:
+    """Derive simple, generic abilities without relying on predefined class lists.
+    - First ability reflects a tier based on relative power.
+    - Abilities are generic and class-agnostic to avoid predefined catalogs.
+    - Last ability is a 'Signature' flavored by the first line of background.
+    """
     tier = "Novice" if power < 0.95 else ("Seasoned" if power < 1.05 else "Expert")
-    base = {
-        "Mage": [f"{tier} Evocations", "Runic Ward", "Arcane Recall"],
-        "Rogue": [f"{tier} Stealth", "Quick Hands", "Cunning Footwork"],
-        "Ranger": [f"{tier} Marksmanship", "Trail Lore", "Animal Rapport"],
-        "Cleric": [f"{tier} Blessing", "Ward of Light", "Soothing Prayer"],
-        "Warrior": [f"{tier} Weapon Mastery", "Shieldwork", "Battle Cry"],
-        "Adventurer": [f"{tier} Ingenuity", "Improvised Tools", "Lucky Break"],
-    }[arche]
-    # Flavor one ability with their background
+    class_token = (char_class or "Class").splitlines()[0][:20]
+    base = [
+        f"{tier} {class_token} Techniques".strip(),
+        "Resourcefulness",
+        "Adaptability",
+    ]
     flavored = base + [f"Signature: {bg.splitlines()[0][:60]}"]
     return flavored[:4]
-
 def party_snapshot(players: List[Player]) -> str:
     if not players:
         return "(no one yet)"
     lines = []
     for p in players:
-        lines.append(f"- {p.name} ({p.power}x power) – {archetype_for_background(p.background)}; Abilities: {', '.join(p.abilities)}")
+        cls = p.char_class or ""
+        lines.append(f"- {p.name} ({p.power}x power) - {cls}; Abilities: {', '.join(p.abilities)}")
     return "\n".join(lines)
-
 def actions_snapshot(actions: Dict[str, str]) -> str:
     if not actions:
         return "(no actions submitted)"
@@ -111,8 +164,20 @@ async def ollama_chat(messages: List[Dict[str, str]], options: Optional[Dict]=No
     async with httpx.AsyncClient(timeout=300) as client:
         r = await client.post(url, json=payload)
         r.raise_for_status()
-        data = r.json()
-        return data.get("message", {}).get("content", "").strip()
+        try:
+            data = r.json()
+        except Exception:
+            return ""
+        # Be robust to unexpected payload shapes
+        if not isinstance(data, dict):
+            return ""
+        msg = data.get("message")
+        if not isinstance(msg, dict):
+            return ""
+        content = msg.get("content", "")
+        if not isinstance(content, str):
+            return ""
+        return content.strip()
 
 GM_SYSTEM_PROMPT = """You are the Game Master (GM) for a cooperative, turn-based fantasy text adventure played in a browser.
 Write vivid but concise scenes (max ~200 words). Always end your output with: "— What do you do?"
@@ -187,7 +252,7 @@ async def get_state(player_id: Optional[str] = None):
         "turn": GAME.turn_number,
         "scenario": GAME.current_scenario,
         "summary": GAME.last_summary,
-        "party": [{"id": p.id, "name": p.name, "power": p.power, "archetype": archetype_for_background(p.background)} for p in active],
+        "party": [{"id": p.id, "name": p.name, "power": p.power, "archetype": (p.char_class or "")} for p in active],
         "your_action": your_action,
         "actions_submitted": len(GAME.current_actions),
         "resolving": GAME.resolving,
@@ -211,10 +276,10 @@ async def join(req: Request):
     # scale power to party
     active = GAME.active_players()
     power = sum([p.power for p in active]) / len(active) if active else 1.0
-    arche = archetype_for_background(background)
-    abilities = abilities_for_archetype(arche, power, background)
+    char_class = await choose_class_with_ollama(background)
+    abilities = abilities_for_class(char_class, power, background)
 
-    p = Player(name, background, power, abilities)
+    p = Player(name, background, power, abilities, char_class=char_class)
     GAME.players[p.id] = p
     if GAME.host_id is None:
         GAME.host_id = p.id

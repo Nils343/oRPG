@@ -1,11 +1,11 @@
 # oRPG
 
-Ollama online RPG  is a small FastAPI application that turns a local LLM into a cooperative, turn-based text adventure. Players join with a name and backstory, receive an archetype and abilities, and submit actions that the AI resolves into the next scene.
+Ollama online RPG  is a small FastAPI application that turns a local LLM into a cooperative, turn-based text adventure. Players join with a name and backstory, receive an AI-chosen class and abilities, and submit actions that the AI resolves into the next scene.
 
 ## Features
 
 - **Local Game Master** powered by [Ollama](https://ollama.ai/) (configurable model and host).
-- **Multiplayer party** with automatic archetypes and flavored abilities.
+- **Multiplayer party** with AI-picked classes and flavored abilities.
 - **Turn-based play**: players submit actions, the server narrates outcomes.
 - **Minimal web client** served from the root endpoint.
 - **REST API** endpoints for `/state`, `/join`, `/action`, `/resolve`, and `/healthz`.

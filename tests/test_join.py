@@ -20,6 +20,10 @@ def test_join_requires_code_and_sets_host(monkeypatch):
         g.current_scenario = "intro"
 
     monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+    async def fake_choose_class(background: str, max_attempts: int = 5) -> str:
+        return "Shadow Blade"
+
+    monkeypatch.setattr(oRPG, "choose_class_with_ollama", fake_choose_class)
 
     client = TestClient(oRPG.app)
 
@@ -53,6 +57,10 @@ def test_join_code_required_but_missing(monkeypatch):
         called["flag"] = True
 
     monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+    async def fake_choose_class(background: str, max_attempts: int = 5) -> str:
+        return "Shadow Blade"
+
+    monkeypatch.setattr(oRPG, "choose_class_with_ollama", fake_choose_class)
 
     client = TestClient(oRPG.app)
 
@@ -147,6 +155,10 @@ def test_join_triggers_initial_scene_only_when_initial(monkeypatch, turn, scenar
         g.current_scenario = "intro"
 
     monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+    async def fake_choose_class(background: str, max_attempts: int = 5) -> str:
+        return "Shadow Blade"
+
+    monkeypatch.setattr(oRPG, "choose_class_with_ollama", fake_choose_class)
 
     client = TestClient(oRPG.app)
     resp = client.post("/join", json={"name": "Alice", "background": "hero"})
@@ -164,6 +176,10 @@ def test_join_assigns_abilities_based_on_background(monkeypatch):
         g.current_scenario = "intro"
 
     monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+    async def fake_choose_class(background: str, max_attempts: int = 5) -> str:
+        return "Shadow Blade"
+
+    monkeypatch.setattr(oRPG, "choose_class_with_ollama", fake_choose_class)
 
     client = TestClient(oRPG.app)
 
@@ -176,8 +192,7 @@ def test_join_assigns_abilities_based_on_background(monkeypatch):
     pid = resp.json()["player_id"]
     player = g.players[pid]
 
-    arche = oRPG.archetype_for_background(bg)
-    expected = oRPG.abilities_for_archetype(arche, player.power, bg)
+    expected = oRPG.abilities_for_class("Shadow Blade", player.power, bg)
     assert player.abilities == expected
 
 
