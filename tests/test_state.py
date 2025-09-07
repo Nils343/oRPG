@@ -53,3 +53,25 @@ def test_state_can_resolve_when_anyone_allowed(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["can_resolve"] is True
+
+
+def test_state_marks_host_flag(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    other = oRPG.Player("Other", "member", 1.0, [])
+    g.players = {host.id: host, other.id: other}
+    g.host_id = host.id
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+
+    resp_host = assert_last_seen_updates(
+        client, host, "get", "/state", params={"player_id": host.id}
+    )
+    assert resp_host.json()["is_host"] is True
+
+    resp_other = assert_last_seen_updates(
+        client, other, "get", "/state", params={"player_id": other.id}
+    )
+    assert resp_other.json()["is_host"] is False
