@@ -64,6 +64,24 @@ def test_join_requires_name_and_background(monkeypatch):
     assert g.host_id is None
 
 
+def test_join_returns_error_json_for_missing_fields(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    client = TestClient(oRPG.app)
+
+    # missing name
+    resp = client.post("/join", json={"name": "", "background": "hero"})
+    assert resp.status_code == 400
+    assert resp.json() == {"error": "Name and background are required."}
+
+    # missing background
+    resp2 = client.post("/join", json={"name": "Alice", "background": ""})
+    assert resp2.status_code == 400
+    assert resp2.json() == {"error": "Name and background are required."}
+
+
 def test_join_power_averages_active_players(monkeypatch):
     g = oRPG.Game()
     now = time.time()
