@@ -600,7 +600,7 @@ async function submitAction(){
   try{
     await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
     S.actionDirty = false;
-    refresh();
+    await refresh();
   }finally{
     busy(false);
     btnBusy("submitBtn", false);
@@ -614,7 +614,7 @@ async function clearAction(){
     await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text: ""})});
     qs("action").value = "";
     S.actionDirty = false;
-    refresh();
+    await refresh();
   }finally{
     busy(false);
   }
