@@ -18,6 +18,16 @@ def test_abilities_tier_and_signature_truncation():
     assert abilities_high[0].startswith("Expert"), abilities_high
 
 
+def test_signature_truncates_at_newline_and_60_chars():
+    first_line = "A wandering mage seeking knowledge." + "x" * 80
+    bg = first_line + "\nSecond line should be ignored"
+    abilities = abilities_for_archetype("Mage", 0.5, bg)
+    signature = abilities[-1]
+    assert signature == f"Signature: {first_line[:60]}"
+    assert "Second line should be ignored" not in signature
+    assert len(signature) == len("Signature: ") + 60
+
+    
 def test_abilities_tier_boundaries():
     bg = "Any background"
     assert abilities_for_archetype("Mage", 0.94, bg)[0].startswith("Novice")
