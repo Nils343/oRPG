@@ -100,3 +100,24 @@ def test_state_without_player_id_returns_public_info(monkeypatch):
     assert data["join_code_required"] is True
     assert data["can_resolve"] is True
     assert data["is_host"] is False
+
+    
+def test_state_last_seen_monotonic(monkeypatch):
+    import itertools
+
+    g = oRPG.Game()
+    player = oRPG.Player("Alice", "adventurer", 1.0, [])
+    g.players = {player.id: player}
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    player.last_seen = 0
+    times = itertools.count(100.0, 1.0)
+    monkeypatch.setattr(oRPG.time, "time", lambda: next(times))
+
+    client = TestClient(oRPG.app)
+    resp1 = client.get("/state", params={"player_id": player.id})
+    assert resp1.status_code == 200
+    first_seen = player.last_seen
+    resp2 = client.get("/state", params={"player_id": player.id})
+    assert resp2.status_code == 200
+    assert player.last_seen > first_seen

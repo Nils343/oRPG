@@ -54,3 +54,24 @@ def test_leave_last_player_clears_host(monkeypatch):
     assert resp.status_code == 200
     assert g.players == {}
     assert g.host_id is None
+
+
+def test_leave_clears_pending_action(monkeypatch):
+    g = oRPG.Game()
+    p1 = oRPG.Player("Alice", "warrior", 1.0, [])
+    p2 = oRPG.Player("Bob", "rogue", 1.0, [])
+    p3 = oRPG.Player("Cara", "mage", 1.0, [])
+    now = time.time()
+    for p in (p1, p2, p3):
+        p.last_seen = now
+    g.players = {p1.id: p1, p2.id: p2, p3.id: p3}
+    g.host_id = p1.id
+    g.current_actions = {p1.id: "attack", p2.id: "hide"}
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    resp = client.post("/leave", json={"player_id": p1.id})
+    assert resp.status_code == 200
+    assert p1.id not in g.players
+    assert p1.id not in g.current_actions
+    assert g.host_id == p2.id
