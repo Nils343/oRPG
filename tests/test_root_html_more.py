@@ -22,10 +22,9 @@ def test_root_contains_key_elements_and_script():
     assert 'id="leaveBtn"' in html
     # Render targets
     assert 'id="scenario"' in html
-    assert 'id="summary"' in html
+    assert 'id="actions"' in html  # replaced Summary pane with Actions pane
     assert 'id="party"' in html
 
     # Script bootstraps
     assert "function load()" in html
     assert "load();" in html
-
