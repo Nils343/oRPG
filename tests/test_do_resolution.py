@@ -33,3 +33,25 @@ def test_do_resolution_updates_game_state(monkeypatch):
     assert hist["scenario"] == "A dragon blocks the path."
     assert hist["actions"] == {player.id: "attack"}
     assert "The dragon falls" in hist["narration"]
+
+
+def test_do_resolution_creates_initial_scene_if_none(monkeypatch):
+    g = oRPG.Game()
+    player = oRPG.Player("Alice", "brave hero", 1.0, [])
+    g.players = {player.id: player}
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    async def fake_ollama_chat(messages, options=None):
+        if messages and messages[0].get("content") == oRPG.GM_SYSTEM_PROMPT:
+            return "A forest clearing. — What do you do?"
+        return "They reached a forest."
+
+    monkeypatch.setattr(oRPG, "ollama_chat", fake_ollama_chat)
+
+    asyncio.run(oRPG.do_resolution())
+
+    assert g.turn_number == 1
+    assert g.current_scenario == "A forest clearing. — What do you do?"
+    assert g.last_summary == "They reached a forest."
+    assert g.current_actions == {}
+    assert g.history == []
