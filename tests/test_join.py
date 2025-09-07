@@ -3,6 +3,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
 import oRPG
 import time
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -108,6 +109,27 @@ def test_join_power_averages_active_players(monkeypatch):
     assert new_player.power != (1.2 + 0.8 + 10.0) / 3
 
 
+@pytest.mark.parametrize(
+    "turn,scenario,called",
+    [
+        (0, None, True),
+        (1, None, False),
+        (0, "scene", False),
+    ],
+)
+def test_join_triggers_initial_scene_only_when_initial(monkeypatch, turn, scenario, called):
+    g = oRPG.Game()
+    g.turn_number = turn
+    g.current_scenario = scenario
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    flag = {"called": False}
+
+    async def fake_initial_scene():
+        flag["called"] = True
+
+        
 def test_join_assigns_abilities_based_on_background(monkeypatch):
     g = oRPG.Game()
     monkeypatch.setattr(oRPG, "GAME", g)
@@ -120,6 +142,10 @@ def test_join_assigns_abilities_based_on_background(monkeypatch):
     monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
 
     client = TestClient(oRPG.app)
+
+    resp = client.post("/join", json={"name": "Alice", "background": "brave warrior"})
+    assert resp.status_code == 200
+    assert flag["called"] is called
     bg = "Cunning thief from the city"
     resp = client.post("/join", json={"name": "Sneak", "background": bg})
     assert resp.status_code == 200
