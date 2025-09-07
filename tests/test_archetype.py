@@ -16,3 +16,12 @@ from oRPG import archetype_for_background
 ])
 def test_archetype_for_background(bg, expected):
     assert archetype_for_background(bg) == expected
+
+
+@pytest.mark.parametrize("bg", [
+    "cLeRiC",
+    "PrIeSt",
+    "pALaDiN",
+])
+def test_cleric_variations(bg):
+    assert archetype_for_background(bg) == "Cleric"
