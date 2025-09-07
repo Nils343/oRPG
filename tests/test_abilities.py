@@ -24,3 +24,10 @@ def test_abilities_tier_boundaries():
     assert abilities_for_archetype("Mage", 0.95, bg)[0].startswith("Seasoned")
     assert abilities_for_archetype("Mage", 1.04, bg)[0].startswith("Seasoned")
     assert abilities_for_archetype("Mage", 1.05, bg)[0].startswith("Expert")
+    
+
+def test_abilities_signature_first_line_and_length():
+    bg = "First line of background.\nSecond line should be ignored."
+    abilities = abilities_for_archetype("Rogue", 0.9, bg)
+    assert len(abilities) == 4
+    assert abilities[-1] == f"Signature: {bg.splitlines()[0][:60]}"
