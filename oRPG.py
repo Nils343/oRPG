@@ -625,18 +625,7 @@ async function submitAction(){
   }
 }
 
-async function clearAction(){
-  if(!S.player_id) return;
-  busy(true);
-  try{
-    await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text: ""})});
-    qs("action").value = "";
-    S.actionDirty = false;
-    await refresh();
-  }finally{
-    busy(false);
-  }
-}
+/* clearAction() removed with Clear button; delete empty action by deleting text and submitting */
 
 async function leaveGame(){
   if(!S.player_id) return;
