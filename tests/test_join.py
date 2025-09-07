@@ -88,3 +88,23 @@ def test_join_power_averages_active_players(monkeypatch):
     new_player = g.players[new_id]
     assert new_player.power == 1.0
     assert new_player.power != (1.2 + 0.8 + 10.0) / 3
+
+
+def test_join_power_matches_single_active_player(monkeypatch):
+    g = oRPG.Game()
+    now = time.time()
+    p1 = oRPG.Player("Alice", "warrior", 2.0, [])
+    p1.last_seen = now
+    g.players = {p1.id: p1}
+    g.host_id = p1.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    client = TestClient(oRPG.app)
+
+    resp = client.post("/join", json={"name": "Bob", "background": "sneaky rogue"})
+    assert resp.status_code == 200
+    new_id = resp.json()["player_id"]
+    assert g.players[new_id].power == 2.0
