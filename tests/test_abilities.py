@@ -18,6 +18,23 @@ def test_abilities_tier_and_signature_truncation():
     assert abilities_high[0].startswith("Expert"), abilities_high
 
 
+def test_abilities_order_before_signature():
+    bg = "An intrepid adventurer."
+    expected = {
+        "Mage": ["Seasoned Evocations", "Runic Ward", "Arcane Recall"],
+        "Rogue": ["Seasoned Stealth", "Quick Hands", "Cunning Footwork"],
+        "Ranger": ["Seasoned Marksmanship", "Trail Lore", "Animal Rapport"],
+        "Cleric": ["Seasoned Blessing", "Ward of Light", "Soothing Prayer"],
+        "Warrior": ["Seasoned Weapon Mastery", "Shieldwork", "Battle Cry"],
+        "Adventurer": ["Seasoned Ingenuity", "Improvised Tools", "Lucky Break"],
+    }
+
+    for arche, base in expected.items():
+        abilities = abilities_for_archetype(arche, 1.0, bg)
+        assert abilities[:-1] == base
+        assert abilities[-1].startswith("Signature:")
+
+        
 def test_signature_truncates_at_newline_and_60_chars():
     first_line = "A wandering mage seeking knowledge." + "x" * 80
     bg = first_line + "\nSecond line should be ignored"
