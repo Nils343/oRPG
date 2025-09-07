@@ -15,6 +15,8 @@ from oRPG import archetype_for_background
     ("A simple farmer with no special training", "Adventurer"),
     ("", "Adventurer"),
 ])
+
+
 def test_archetype_for_background(bg, expected):
     assert archetype_for_background(bg) == expected
 
@@ -22,6 +24,16 @@ def test_archetype_for_background(bg, expected):
 @pytest.mark.parametrize(
     "bg",
     [
+        "Rogue slipping through shadows",
+        "thief lurking in the alleys",
+        "ASSASSIN on a clandestine mission",
+        "sPy gathering intel",
+    ],
+)
+
+
+def test_archetype_stealth_keywords(bg):
+    assert archetype_for_background(bg) == "Rogue"
         "A wandering MAGE seeking knowledge",
         "The wise wizard of the north",
         "An enigmatic SoRcErEr's apprentice",
