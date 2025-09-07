@@ -65,6 +65,24 @@ def test_join_requires_name_and_background(monkeypatch):
     assert g.host_id is None
 
 
+def test_join_returns_error_json_for_missing_fields(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    client = TestClient(oRPG.app)
+
+    # missing name
+    resp = client.post("/join", json={"name": "", "background": "hero"})
+    assert resp.status_code == 400
+    assert resp.json() == {"error": "Name and background are required."}
+
+    # missing background
+    resp2 = client.post("/join", json={"name": "Alice", "background": ""})
+    assert resp2.status_code == 400
+    assert resp2.json() == {"error": "Name and background are required."}
+
+
 def test_join_power_averages_active_players(monkeypatch):
     g = oRPG.Game()
     now = time.time()
@@ -111,6 +129,16 @@ def test_join_triggers_initial_scene_only_when_initial(monkeypatch, turn, scenar
     async def fake_initial_scene():
         flag["called"] = True
 
+        
+def test_join_assigns_abilities_based_on_background(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    async def fake_initial_scene():
+        g.turn_number = 1
+        g.current_scenario = "intro"
+
     monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
 
     client = TestClient(oRPG.app)
@@ -118,3 +146,32 @@ def test_join_triggers_initial_scene_only_when_initial(monkeypatch, turn, scenar
     resp = client.post("/join", json={"name": "Alice", "background": "brave warrior"})
     assert resp.status_code == 200
     assert flag["called"] is called
+    bg = "Cunning thief from the city"
+    resp = client.post("/join", json={"name": "Sneak", "background": bg})
+    assert resp.status_code == 200
+    pid = resp.json()["player_id"]
+    player = g.players[pid]
+
+    arche = oRPG.archetype_for_background(bg)
+    expected = oRPG.abilities_for_archetype(arche, player.power, bg)
+    assert player.abilities == expected
+
+    
+def test_join_power_matches_single_active_player(monkeypatch):
+    g = oRPG.Game()
+    now = time.time()
+    p1 = oRPG.Player("Alice", "warrior", 2.0, [])
+    p1.last_seen = now
+    g.players = {p1.id: p1}
+    g.host_id = p1.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "")
+
+    client = TestClient(oRPG.app)
+
+    resp = client.post("/join", json={"name": "Bob", "background": "sneaky rogue"})
+    assert resp.status_code == 200
+    new_id = resp.json()["player_id"]
+    assert g.players[new_id].power == 2.0
