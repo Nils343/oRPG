@@ -438,7 +438,7 @@ footer{margin-top:20px;color:#7b8b9b}
         <label>Your action this turn</label>
         <textarea id="action" placeholder="Describe what your character attempts… (you can edit until the turn resolves)"></textarea>
         <div class="row" style="margin-top:8px">
-          <button id="submitBtn" onclick="submitAction()">Submit / Update</button>
+          <button id="submitBtn" onclick="submitAction()">Submit</button>
           <button class="secondary" onclick="clearAction()">Clear</button>
           <button id="resolveBtn" class="secondary" style="display:none" onclick="resolveNow()">Resolve turn</button>
           <button id="leaveBtn" class="secondary" onclick="leaveGame()">Leave game</button>
@@ -476,7 +476,8 @@ const S = {
   actionDirty: false,
   lastTurn: 0,
   pendingOps: 0,
-  serverResolving: false
+  serverResolving: false,
+  submittedOnce: false
 };
 
 function qs(id){return document.getElementById(id)}
@@ -492,14 +493,24 @@ function busy(on){
   updateBusy();
 }
 
-function btnBusy(id, on, txt){
+function btnBusy(id, on, txt, count){
   const b = qs(id);
   if(!b) return;
   if(on){
     b.dataset.orig = b.textContent;
-    if(txt) b.textContent = txt;
     b.disabled = true;
+    if(count){
+      let secs = 0;
+      b.textContent = txt ? `${txt} (0s)` : `${b.textContent} (0s)`;
+      b._timer = setInterval(() => {
+        secs++;
+        b.textContent = txt ? `${txt} (${secs}s)` : `${b.dataset.orig} (${secs}s)`;
+      }, 1000);
+    }else if(txt){
+      b.textContent = txt;
+    }
   }else{
+    if(b._timer){ clearInterval(b._timer); delete b._timer; }
     if(b.dataset.orig !== undefined){
       b.textContent = b.dataset.orig;
       delete b.dataset.orig;
@@ -553,6 +564,12 @@ function render(state){
 
   const me = S.player_id;
   if(me && !S.actionDirty) qs("action").value = state.your_action || "";
+  const submitBtn = qs("submitBtn");
+  const hasAction = !!state.your_action;
+  S.submittedOnce = hasAction;
+  if(!submitBtn.disabled){
+    submitBtn.textContent = hasAction ? "Submit again" : "Submit";
+  }
 
   qs("party").innerHTML = (state.party||[]).map(p => {
     const you = p.id === S.player_id ? ' <span class="badge you">you</span>' : '';
@@ -575,7 +592,7 @@ async function doJoin(){
   const background = qs("background").value.trim();
   const code = qs("joinCode")?.value.trim() || "";
   if(!name || !background){ alert("Please fill in name and background."); return; }
-  btnBusy("joinBtn", true, "Entering...");
+  btnBusy("joinBtn", true, "Entering...", true);
   busy(true);
   try{
     const res = await api("/join", {method:"POST", body: JSON.stringify({name, background, code})});
@@ -600,10 +617,12 @@ async function submitAction(){
   try{
     await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
     S.actionDirty = false;
+    S.submittedOnce = true;
     await refresh();
   }finally{
     busy(false);
     btnBusy("submitBtn", false);
+    if(S.submittedOnce) qs("submitBtn").textContent = "Submit again";
   }
 }
 
@@ -641,7 +660,7 @@ async function leaveGame(){
 
 async function resolveNow(){
   if(!S.canResolve){ alert("Resolving is disabled by host."); return; }
-  btnBusy("resolveBtn", true, "Resolving...");
+  btnBusy("resolveBtn", true, "Resolving...", true);
   busy(true);
   try{
     show("resolving", true);
