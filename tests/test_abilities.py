@@ -16,3 +16,10 @@ def test_abilities_tier_and_signature_truncation():
 
     abilities_high = abilities_for_archetype("Mage", 1.1, bg)
     assert abilities_high[0].startswith("Expert"), abilities_high
+
+
+def test_abilities_signature_first_line_and_length():
+    bg = "First line of background.\nSecond line should be ignored."
+    abilities = abilities_for_archetype("Rogue", 0.9, bg)
+    assert len(abilities) == 4
+    assert abilities[-1] == f"Signature: {bg.splitlines()[0][:60]}"
