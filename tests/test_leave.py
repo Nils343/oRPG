@@ -75,3 +75,19 @@ def test_leave_clears_pending_action(monkeypatch):
     assert p1.id not in g.players
     assert p1.id not in g.current_actions
     assert g.host_id == p2.id
+
+
+def test_leave_invalid_player(monkeypatch):
+    g = oRPG.Game()
+    p1 = oRPG.Player("Alice", "warrior", 1.0, [])
+    g.players = {p1.id: p1}
+    g.host_id = p1.id
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    resp = client.post("/leave", json={"player_id": "not-a-real-id"})
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "Invalid player."
+    # Ensure state unchanged
+    assert p1.id in g.players
+    assert g.host_id == p1.id

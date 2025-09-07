@@ -24,9 +24,9 @@ def test_submit_action_stores_truncates_and_clears(monkeypatch):
     assert player.id not in g.current_actions
 
 
-def test_submit_action_requires_valid_player():
+def test_submit_action_requires_valid_player(monkeypatch):
     g = oRPG.Game()
-    oRPG.GAME = g
+    monkeypatch.setattr(oRPG, "GAME", g)
     client = TestClient(oRPG.app)
 
     resp = client.post("/action", json={"player_id": "bogus", "text": "hi"})
@@ -57,6 +57,19 @@ def test_submit_action_trims_and_updates_last_seen(monkeypatch):
         client, player, "post", "/action", json={"player_id": player.id, "text": long_text}
     )
     assert g.current_actions[player.id] == "x" * 500
+
+
+def test_submit_action_trims_newlines(monkeypatch):
+    g = oRPG.Game()
+    player = oRPG.Player("Alice", "hero", 1.0, [])
+    g.players = {player.id: player}
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    payload = {"player_id": player.id, "text": "\n  attack with gusto  \n"}
+    resp = client.post("/action", json=payload)
+    assert resp.status_code == 200
+    assert g.current_actions[player.id] == "attack with gusto"
 
     
 def test_post_action_empty_text_clears_action(monkeypatch):

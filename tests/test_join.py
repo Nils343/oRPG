@@ -42,6 +42,28 @@ def test_join_requires_code_and_sets_host(monkeypatch):
     assert called["flag"] is False
 
 
+def test_join_code_required_but_missing(monkeypatch):
+    g = oRPG.Game()
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "secret")
+
+    called = {"flag": False}
+
+    async def fake_initial_scene():
+        called["flag"] = True
+
+    monkeypatch.setattr(oRPG, "ensure_initial_scene", fake_initial_scene)
+
+    client = TestClient(oRPG.app)
+
+    # Omit the code field entirely
+    resp = client.post("/join", json={"name": "Alice", "background": "brave warrior"})
+    assert resp.status_code == 403
+    assert resp.json()["error"] == "Invalid join code."
+    assert g.host_id is None
+    assert called["flag"] is False
+
+
 def test_join_requires_name_and_background(monkeypatch):
     g = oRPG.Game()
     monkeypatch.setattr(oRPG, "GAME", g)

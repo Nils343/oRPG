@@ -1,3 +1,11 @@
+# Merged Python files
+# Created: 2025-09-07T10:12:25
+# Directory: C:\NOT-SYNCED\oRPG
+# Files included:
+#   - oRPG.py
+
+# ===== BEGIN: oRPG.py =====
+
 import os
 import uuid
 import time
@@ -439,6 +447,7 @@ footer{margin-top:20px;color:#7b8b9b}
         <textarea id="action" placeholder="Describe what your character attempts… (you can edit until the turn resolves)"></textarea>
         <div class="row" style="margin-top:8px">
           <button id="submitBtn" onclick="submitAction()">Submit</button>
+          <button class="secondary" onclick="clearAction()">Clear</button>
           <button id="resolveBtn" class="secondary" style="display:none" onclick="resolveNow()">Resolve turn</button>
           <button id="leaveBtn" class="secondary" onclick="leaveGame()">Leave game</button>
         </div>
@@ -687,3 +696,6 @@ if __name__ == "__main__":
     import uvicorn
     print(f"Starting on http://{BIND_HOST}:{BIND_PORT}  (model={OLLAMA_MODEL})")
     uvicorn.run(app, host=BIND_HOST, port=BIND_PORT)
+
+# ===== END: oRPG.py =====
+

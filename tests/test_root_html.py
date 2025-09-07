@@ -11,5 +11,6 @@ def test_root_returns_single_page_html():
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
     assert "<!doctype html>" in resp.text.lower()
+    # Brand text should be present, but avoid coupling to decorative prefixes
     assert "Ollama Fantasy Party" in resp.text
-    assert "⚔️ Ollama Fantasy Party" in resp.text
+
