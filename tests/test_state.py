@@ -153,6 +153,28 @@ def test_state_without_player_id_returns_public_info(monkeypatch):
     assert data["can_resolve"] is True
 
 
+def test_state_can_resolve_reflects_runtime_toggle(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    other = oRPG.Player("Other", "member", 1.0, [])
+    g.players = {host.id: host, other.id: other}
+    g.host_id = host.id
+    g.turn_number = 1
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+    client = TestClient(oRPG.app)
+
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", True)
+    resp = client.get("/state", params={"player_id": other.id})
+    assert resp.status_code == 200
+    assert resp.json()["can_resolve"] is True
+
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", False)
+    resp2 = client.get("/state", params={"player_id": other.id})
+    assert resp2.status_code == 200
+    assert resp2.json()["can_resolve"] is False
+
+    
 def test_state_party_excludes_stale_players(monkeypatch):
     g = oRPG.Game()
     recent = oRPG.Player("Recent", "active", 1.0, [])
