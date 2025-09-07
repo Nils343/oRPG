@@ -45,6 +45,20 @@ def test_submit_action_updates_last_seen(monkeypatch):
     )
 
 
+def test_submit_action_trims_and_updates_last_seen(monkeypatch):
+    g = oRPG.Game()
+    player = oRPG.Player("Alice", "hero", 1.0, [])
+    g.players = {player.id: player}
+    monkeypatch.setattr(oRPG, "GAME", g)
+
+    client = TestClient(oRPG.app)
+    long_text = "  " + "x" * 600 + "  "
+    assert_last_seen_updates(
+        client, player, "post", "/action", json={"player_id": player.id, "text": long_text}
+    )
+    assert g.current_actions[player.id] == "x" * 500
+
+    
 def test_post_action_empty_text_clears_action(monkeypatch):
     g = oRPG.Game()
     player = oRPG.Player("Alice", "hero", 1.0, [])
