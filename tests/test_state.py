@@ -190,7 +190,8 @@ def test_state_party_excludes_stale_players(monkeypatch):
     client = TestClient(oRPG.app)
     resp = client.get("/state", params={"player_id": recent.id})
     assert resp.status_code == 200
-    party = resp.json()["party"]
+    data = resp.json()
+    party = data["party"]
     ids = [p["id"] for p in party]
     assert recent.id in ids
     assert stale.id not in ids
