@@ -55,6 +55,53 @@ def test_state_can_resolve_when_anyone_allowed(monkeypatch):
     assert data["can_resolve"] is True
 
 
+def test_state_without_player_id_returns_public_info(monkeypatch):
+    g = oRPG.Game()
+    host = oRPG.Player("Host", "leader", 1.0, [])
+    other = oRPG.Player("Other", "member", 1.0, [])
+    g.players = {host.id: host, other.id: other}
+    g.host_id = host.id
+    g.turn_number = 1
+    g.current_scenario = "scene"
+    g.last_summary = "summary"
+    g.current_actions = {host.id: "look", other.id: "hide"}
+    g.resolving = True
+
+    monkeypatch.setattr(oRPG, "GAME", g)
+    monkeypatch.setattr(oRPG, "JOIN_CODE", "secret")
+    monkeypatch.setattr(oRPG, "ALLOW_ANYONE_TO_RESOLVE", True)
+
+    client = TestClient(oRPG.app)
+    resp = client.get("/state")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["turn"] == 1
+    assert data["scenario"] == "scene"
+    assert data["summary"] == "summary"
+    party = data["party"]
+    expected_party = [
+        {
+            "id": host.id,
+            "name": host.name,
+            "power": host.power,
+            "archetype": oRPG.archetype_for_background(host.background),
+        },
+        {
+            "id": other.id,
+            "name": other.name,
+            "power": other.power,
+            "archetype": oRPG.archetype_for_background(other.background),
+        },
+    ]
+    assert party == expected_party
+    assert data["actions_submitted"] == 2
+    assert data["resolving"] is True
+    assert data["join_code_required"] is True
+    assert data["can_resolve"] is True
+    assert data["is_host"] is False
+
+    
 def test_state_last_seen_monotonic(monkeypatch):
     import itertools
 
