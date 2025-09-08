@@ -3,7 +3,7 @@ import uuid
 import time
 import json
 import asyncio
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -26,16 +26,18 @@ BIND_PORT = int(os.getenv("BIND_PORT", "8000"))
 # Minimal in-memory game state
 # -----------------------------
 class Player:
-    def __init__(self, name: str, background: str, power: float, abilities: List[str], char_class: Optional[str] = None, status: Optional[str] = None):
+    def __init__(self, name: str, background: str, abilities: List[str], char_class: Optional[str] = None, status: Optional[str] = None, token: Optional[str] = None, equipment: Optional[List[str]] = None):
         self.id = str(uuid.uuid4())
         self.name = name.strip()[:40]
         self.background = background.strip()[:400]
-        self.power = round(power, 2)
         self.abilities = abilities[:5]
         self.char_class = (char_class or "").strip()[:40]
         self.status = (status or "Healthy").strip()[:20] or "Healthy"
         self.joined_at = time.time()
         self.last_seen = time.time()
+        # Auth token used to verify privileged actions
+        self.token = token
+        self.equipment = list(equipment or [])[:8]
 
 class Game:
     def __init__(self):
@@ -47,7 +49,7 @@ class Game:
         self.history: List[Dict] = []
         self.resolving: bool = False
         self.lock = asyncio.Lock()
-        self.host_id: Optional[str] = None   # <— NEW
+        self.host_id: Optional[str] = None   # <- NEW
 
 
     def active_players(self, stale_seconds: int = 600) -> List[Player]:
@@ -55,7 +57,7 @@ class Game:
         return [p for p in self.players.values() if now - p.last_seen < stale_seconds]
 
 GAME = Game()
-app = FastAPI(title="Ollama Fantasy Party Server")
+app = FastAPI(title="Nils's Online RPG")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # Tiny 1x1 PNG to avoid favicon 404s (base64-embedded)
@@ -66,25 +68,32 @@ FAVICON_PNG = base64.b64decode(
 # -----------------------------
 # Helpers
 # -----------------------------
+class OllamaUnavailable(Exception):
+    """Raised when the Ollama service is unreachable/unavailable."""
+    pass
+
+@app.exception_handler(OllamaUnavailable)
+async def _handle_ollama_unavailable(request: Request, exc: OllamaUnavailable):
+    # Return a concise, readable error for the browser alert
+    msg = (
+        f"AI service unavailable: {exc}\n"
+        f"Host: {OLLAMA_HOST}\n"
+        "Hint: start Ollama with 'ollama serve' or set OLLAMA_HOST/OLLAMA_MODEL."
+    )
+    return PlainTextResponse(msg, status_code=503)
+
 async def choose_class_with_ollama(background: str, max_attempts: int = 5) -> str:
-    """Use Ollama to choose a fitting character class based on the player's background.
-    Constraints:
-    - Return at most two words.
-    - If Ollama returns more than two words, ask again (up to max_attempts),
-      tightening instructions. Finally, fall back to the first two words.
-    - Do not rely on any predefined class list.
-    - Output must be ONLY the class name: no labels, quotes, or punctuation.
-    """
+    """Use Ollama to choose a fitting character class based on the player's background."""
     bg = (background or "").strip()
     system = (
         "You assign concise fantasy character classes based on a short background. "
-        "Output ONLY the class name — one or two words. No labels, no quotes, no punctuation, "
+        "Output ONLY the class name — one or two words; prefer one word. No labels, no quotes, no punctuation, "
         "no extras. Prefer evocative archetypes that fit the background (e.g., 'Shadow Blade', 'Stormcaller'). "
         "Avoid articles or descriptors like 'the', 'a', 'class', 'role', or sentences."
     )
     user_tmpl = (
         "Background: {bg}\n\n"
-        "Task: Name a fitting fantasy character class (max two words).\n"
+        "Task: Name a fitting fantasy character class (max two words; prefer one word).\n"
         "Respond with ONLY the class name, no quotes or punctuation."
     )
 
@@ -95,7 +104,7 @@ async def choose_class_with_ollama(background: str, max_attempts: int = 5) -> st
         content = await ollama_chat([
             {"role": "system", "content": system},
             {"role": "user", "content": user_tmpl.format(bg=bg)}
-        ], options={"temperature": 0.3, "num_ctx": 1024})
+        ], options={"temperature": 0.3, "num_ctx": 8192})
         # normalize
         text = (content or "").strip()
         # remove surrounding quotes/backticks and punctuation-only decorations
@@ -121,28 +130,79 @@ async def choose_class_with_ollama(background: str, max_attempts: int = 5) -> st
         last = " ".join(cleaned)
         user_tmpl = (
             "Background: {bg}\n\n"
-            "Task: Output ONLY a class name of one or two words. "
+            "Task: Output ONLY a class name of one or two words; prefer one word. "
             "If you think of more than two, choose the best two-word version. "
             "Absolutely no extra words, labels, punctuation, or quotes."
         )
     # fallback: trim to first two words if still non-compliant
     trimmed = " ".join((last or bg or "Adventurer").split()[:2])
     return trimmed[:40]
-def abilities_for_class(char_class: str, power: float, bg: str) -> List[str]:
-    """Derive simple, generic abilities without relying on predefined class lists.
-    - First ability reflects a tier based on relative power.
-    - Abilities are generic and class-agnostic to avoid predefined catalogs.
-    - Last ability is a 'Signature' flavored by the first line of background.
+async def generate_sheet_with_ollama(background: str, char_class: str, max_attempts: int = 4) -> Tuple[List[str], List[str]]:
+    """Use the model to produce abilities and equipment as JSON only.
+
+    Returns (abilities, equipment). If parsing fails after several attempts,
+    returns ([], []).
     """
-    tier = "Novice" if power < 0.95 else ("Seasoned" if power < 1.05 else "Expert")
-    class_token = (char_class or "Class").splitlines()[0][:20]
-    base = [
-        f"{tier} {class_token} Techniques".strip(),
-        "Resourcefulness",
-        "Adaptability",
-    ]
-    flavored = base + [f"Signature: {bg.splitlines()[0][:60]}"]
-    return flavored[:4]
+    sys_prompt = (
+        "You create concise RPG character sheets. Respond ONLY with JSON. "
+        "Given a background and class, output: {\n  \"abilities\": [short strings],\n  \"equipment\": [short strings]\n}. "
+        "Keep abilities to 3-5 items and equipment to 3-6 items. "
+        "No prose, no code fences."
+    )
+    user_tmpl = (
+        "Background: {bg}\nClass: {cls}\n\n"
+        "Task: Output JSON with arrays 'abilities' and 'equipment'."
+    )
+
+    def sanitize(items: List) -> List[str]:
+        out: List[str] = []
+        for x in (items or [])[:8]:
+            try:
+                s = str(x).strip()
+            except Exception:
+                continue
+            if not s:
+                continue
+            s = " ".join(s.replace("\n", " ").split())
+            out.append(s[:100])
+        return out
+
+    attempts = 0
+    while attempts < max_attempts:
+        attempts += 1
+        text = await ollama_chat([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_tmpl.format(bg=(background or "").strip(), cls=(char_class or "").strip())},
+        ], options={"temperature": 0.5, "num_ctx": 8192})
+        raw = (text or "").strip()
+        # Strip code fences if present
+        if "```" in raw:
+            first = raw.find("```")
+            last = raw.rfind("```")
+            if last > first:
+                content = raw[first+3:last]
+                # Drop language tag line if present
+                if not content.lstrip().startswith("{") and "\n" in content:
+                    content = content.split("\n", 1)[1]
+                raw = content.strip()
+        # Try to isolate the JSON object
+        i0 = raw.find('{')
+        i1 = raw.rfind('}')
+        candidate = raw[i0:i1+1] if (i0 != -1 and i1 != -1 and i1 > i0) else raw
+        try:
+            data = json.loads(candidate)
+        except Exception:
+            data = None
+        if isinstance(data, dict):
+            abilities = sanitize(data.get("abilities") or [])
+            equipment = sanitize(data.get("equipment") or [])
+            if abilities or equipment:
+                return abilities[:5], equipment[:6]
+        sys_prompt = (
+            "Respond ONLY with strict JSON of the exact shape: "
+            "{\"abilities\":[...],\"equipment\":[...]}."
+        )
+    return [], []
 def party_snapshot(players: List[Player]) -> str:
     if not players:
         return "(no one yet)"
@@ -150,7 +210,7 @@ def party_snapshot(players: List[Player]) -> str:
     for p in players:
         cls = p.char_class or ""
         status = p.status or "Healthy"
-        lines.append(f"- {p.name} ({p.power}x power) - {cls}; Status: {status}; Abilities: {', '.join(p.abilities)}")
+        lines.append(f"- {p.name} - {cls}; Status: {status}; Abilities: {', '.join(p.abilities)}")
     return "\n".join(lines)
 def actions_snapshot(actions: Dict[str, str]) -> str:
     if not actions:
@@ -162,6 +222,26 @@ def actions_snapshot(actions: Dict[str, str]) -> str:
         lines.append(f"- {who}: {text.strip()}")
     return "\n".join(lines)
 
+def auth_get_player_from_body(body: Dict) -> Optional[Player]:
+    """Validate player authentication based on id + token in request body.
+    Returns the Player if valid, or None if invalid/missing.
+    """
+    try:
+        pid = body.get("player_id")
+        token = body.get("player_token")
+        if not pid or pid not in GAME.players:
+            return None
+        player = GAME.players[pid]
+        if not token or not isinstance(token, str):
+            # Missing token
+            return None
+        if player.token != token:
+            # Wrong token
+            return None
+        return player
+    except Exception:
+        return None
+
 async def ollama_chat(messages: List[Dict[str, str]], options: Optional[Dict]=None) -> str:
     payload = {
         "model": OLLAMA_MODEL,
@@ -171,23 +251,124 @@ async def ollama_chat(messages: List[Dict[str, str]], options: Optional[Dict]=No
     if options:
         payload["options"] = options
     url = f"{OLLAMA_HOST}/api/chat"
-    async with httpx.AsyncClient(timeout=300) as client:
-        r = await client.post(url, json=payload)
-        r.raise_for_status()
-        try:
-            data = r.json()
-        except Exception:
-            return ""
-        # Be robust to unexpected payload shapes
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(url, json=payload)
+            r.raise_for_status()
+            try:
+                data = r.json()
+            except Exception:
+                return ""
+            # Be robust to unexpected payload shapes
+            if not isinstance(data, dict):
+                return ""
+            msg = data.get("message")
+            if not isinstance(msg, dict):
+                return ""
+            content = msg.get("content", "")
+            if not isinstance(content, str):
+                return ""
+            return content.strip()
+    except Exception as e:
+        # Treat likely connection failures as Ollama unavailable; otherwise re-raise
+        emsg = str(e).lower()
+        if any(tok in emsg for tok in (
+            "connect", "connection", "refused", "timed out", "timeout", "dns", "name or service not known"
+        )):
+            raise OllamaUnavailable(
+                f"cannot reach Ollama at {OLLAMA_HOST} ({e.__class__.__name__}: {e})"
+            )
+        raise
+
+async def update_party_statuses_with_ollama(summary: str, latest_narration: str) -> None:
+    """Ask Ollama to update per-player status as a single word, changing only if necessary.
+    Uses player IDs in the prompt/output to avoid ambiguity; preserves order.
+    If Ollama returns invalid JSON or unusable data, leave statuses unchanged.
+    """
+    try:
+        players = GAME.active_players()
+        if not players:
+            return
+
+        allowed_examples = (
+            "healthy,wounded,unconscious,incapacitated,restrained,petrified,dead,missing,captured,poisoned,bleeding,stunned,exhausted"
+        )
+
+        # Build a compact JSON snapshot for the model
+        snapshot = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "class": p.char_class or "",
+                "status": p.status or "Healthy",
+            }
+            for p in players
+        ]
+
+        system = (
+            "You update each character's 'status' based on the game context. "
+            "Return only JSON. For each input character, output exactly one word status, title-case if natural. "
+            "Use a single token with no spaces (e.g., Healthy, Wounded, Unconscious). "
+            "Only change a character's status if the Summary or Latest Narration clearly indicate a different condition; otherwise repeat the current status exactly. "
+            "Prefer concise terms similar to: " + allowed_examples + "."
+        )
+
+        user = (
+            "Summary of Facts (latest):\n" + (summary or "(none)") +
+            "\n\nLatest Narration:\n" + (latest_narration or "(none)") +
+            "\n\nCurrent Players (JSON array):\n" + json.dumps(snapshot, ensure_ascii=True) +
+            "\n\nTask: Decide updates minimally. If no change is needed for a player, return their current status.\n" \
+            "Output JSON ONLY in this shape (no prose): {\n  \"updates\": [ { \"id\": \"<id>\", \"status\": \"<OneWord>\" }, ... ]\n}"
+        )
+
+        raw = await ollama_chat([
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ], options={"temperature": 0.2, "num_ctx": 8192})
+
+        # Try to extract JSON from response
+        text = (raw or "").strip()
+        # Some models may wrap; attempt to find the first '{' ... last '}'
+        if "{" in text and "}" in text:
+            text = text[text.find("{"): text.rfind("}")+1]
+        data = json.loads(text)
         if not isinstance(data, dict):
-            return ""
-        msg = data.get("message")
-        if not isinstance(msg, dict):
-            return ""
-        content = msg.get("content", "")
-        if not isinstance(content, str):
-            return ""
-        return content.strip()
+            return
+        updates = data.get("updates")
+        if not isinstance(updates, list):
+            return
+
+        # Helper to normalize to one-word Title Case token
+        def normalize_status_token(s: str, default: str) -> str:
+            s = (s or "").strip()
+            if not s:
+                return default
+            # keep only letters (allow simple hyphen fallback by removing hyphen)
+            # split on whitespace, take first token
+            token = s.split()[0]
+            token = "".join(ch for ch in token if ch.isalpha())
+            if not token:
+                return default
+            # Title-case common statuses
+            return token[:20].capitalize()
+
+        # Index players by id for reliable mapping
+        by_id = {p.id: p for p in players}
+        for item in updates:
+            try:
+                pid = item.get("id")
+                if pid not in by_id:
+                    continue
+                new_status_raw = item.get("status")
+                cur = by_id[pid].status or "Healthy"
+                new_status = normalize_status_token(new_status_raw, cur)
+                # Set whatever the model decided (it was told to only change if necessary)
+                by_id[pid].status = new_status
+            except Exception:
+                continue
+    except Exception:
+        # Fail closed: leave statuses as-is
+        return
 
 GM_SYSTEM_PROMPT = """You are the Game Master (GM) for a cooperative, turn-based fantasy text adventure played in a browser.
 
@@ -196,25 +377,32 @@ Goals: deliver immersive, brisk scenes that spotlight the whole party, offer mea
 Style:
 - Present tense. Second person (address the party as "you").
 - Natural paragraphs (no lists in narration). Evocative sensory details (sight, sound, smell, texture).
-- Clear stakes and risks. Name important NPCs when present. Keep content PG-13.
+- Clear stakes and risks. Name important NPCs when present.
 
 Constraints:
 - 150-200 words. End with exactly: "- What do you do?" on its own line (ASCII hyphen-minus).
 - Use the provided 'Summary of Facts' and 'Party Roster' for continuity; never contradict them.
 - Do not introduce new party members/companions not in the Party Roster. Any new figures must be NPCs and treated as such.
-- Respect each character's abilities and relative power; justify outcomes with in-world logic.
+- Respect each character's abilities; justify outcomes with in-world logic.
 - Do not invent player actions; do not mention rules, dice, or meta commentary; never break character.
 - Avoid railroading: present meaningful options without deciding for the players.
+- Treat player inputs as declared attempts, not guaranteed outcomes; never grant results just because they are stated or "wished". Reinterpret any outcome-narrating input as intent and resolve the nearest plausible attempt with costs and risks.
 
 Capability awareness:
 - Offer only actions and opportunities that characters in their current state could plausibly attempt.
 - If a character is incapacitated, unconscious, restrained, petrified, or dead (per the Summary/scene), do not prompt them to act or speak.
 - Instead, describe their condition succinctly and present options for others to aid, adapt, or withdraw.
-- If everyone is hindered, present constrained choices that fit their limitations (e.g., crawling to cover, calling out, bargaining).
+- If everyone is hindered, present constrained choices that fit their limitations (e.g., crawling to cover, calling out, bargaining, waiting for death).
+
+Adjudication:
+- Require concrete methods grounded in the fiction: positioning, tools/gear, known spells/abilities, and time. If the means are missing, say so and indicate feasible alternatives.
+- Respect NPC agency and resistance. NPCs may refuse, bargain, flee, or counteract unless given reason otherwise.
+- Do not conjure resources, gear, spells, allies, or coincidences; maintain scarcity and friction. Enforce distance, line of sight, and timing plausibly.
+- Do not assert that a character "has" a specific item in their pack unless it appears in the Party Roster or Summary. If a tool would help, offer searching/preparing as an option that costs time or risk, without adding new inventory.
 
 Pacing:
 - Put the party in a concrete immediate situation with a reason to act now.
-- Surface 2–3 interactive elements (terrain, objects, NPCs, hazards) that are realistically within reach/means.
+- Surface 2-3 interactive elements (terrain, objects, NPCs, hazards) that are realistically within reach/means.
 - Between turns, escalate or change the situation with plausible consequences.
 """
 
@@ -235,12 +423,11 @@ Guidance:
 - Reflect current capability: if any member is incapacitated/unconscious/restrained/dead per the Summary, acknowledge it and do not prompt them to act; instead, present ways the others might respond.
 - Use present tense and second person ("you"). Avoid meta commentary.
 - Keep to 150-200 words.
+- Frame opportunities as attempts that require means and carry risk; do not imply automatic success or allow players to dictate outcomes by fiat.
+ - Do not introduce new character gear; rely on what the Party Roster/Summary or background implies. Environmental affordances are fine (e.g., loose stones, debris), but do not add items "in your pack" unless already established.
 End with: "- What do you do?"
 
 Also recognized rendering in some environments: "— What do you do?" (still output ASCII '-') """
-    # include alternate rendering token to satisfy test expectations without changing the primary target
-    # Some terminals/renderers show a replacement character; models should still output ASCII '-'.
-    
 
 def resolution_user_message(summary: str, party: str, scenario: str, actions: str) -> str:
     return f"""RESOLVE THE PARTY'S ACTIONS AND SET UP THE NEXT SITUATION.
@@ -258,11 +445,16 @@ Actions Taken This Turn:
 {actions}
 
 Task:
-- Resolve each stated action fairly, referencing abilities/power to justify outcomes.
+- Resolve each stated action fairly, referencing abilities and status to justify outcomes.
 - Ensure outcomes reflect current capability. If an action is impossible due to the actor's condition (e.g., incapacitated/unconscious/restrained/dead), do not have them act or speak; resolve with appropriate consequences (nearest feasible interpretation, failure, or need for aid) and note the constraint.
 - Do not introduce new party members/companions not in the Party Roster; any new figures must be NPCs.
 - Show consequences (including mixed results) and how actions interact with each other.
 - Do not invent player actions; keep narration under 200 words in natural paragraphs.
+- Treat player inputs as attempts, not accomplished outcomes. If a player narrates a result or "wishes" a world change without the means (gear, positioning, known spell/ability), reinterpret it as intent and resolve the nearest plausible attempt, or state why it fails and suggest feasible alternatives. Do not grant outcomes by fiat.
+- Require concrete methods using established resources, positioning, and knowledge. Do not conjure resources, allies, or coincidences; respect distance, line of sight, time pressure, and NPC agency (they may resist, negotiate, or ignore).
+- If an action is vague or purely wishful, implicitly clarify by presenting a couple of specific next-step options that fit the situation and risks.
+ - If a declaration references a nonexistent NPC or resource, do not substitute a different player action. Reflect the non-effect or closest minimal interpretation, then set up consequences and invite a new choice.
+ - Do not narrate characters performing additional actions beyond what they declared. Only resolve the stated attempt and its immediate, necessary micro-steps.
 - Change the situation: reveal new information, escalate a threat, or open new opportunities.
 - Set up the next situation and end with exactly "- What do you do?"
 
@@ -288,6 +480,7 @@ Newest Narration:
 Rules:
 - Do not add new party members; anyone not in the Party Roster is an NPC.
 - Use ASCII characters; avoid fancy punctuation that may not render.
+ - List only resources explicitly established in the Party Roster, prior Summary, or newest narration; do not invent new gear, spells, or allies.
 
 Produce 8-12 single-line bullet points (each starting with "- "). Cover: current locations, key NPCs with short tags, per-character status (healthy/wounded/unconscious/incapacitated/restrained/petrified/dead/missing/captured), party resources (notable gear/spells), notable items/clues, active threats/timers, immediate goals, and open questions. Be concrete and avoid prose.
 Keep it under ~180 words."""
@@ -341,27 +534,38 @@ async def get_state(player_id: Optional[str] = None):
     you = GAME.players.get(player_id) if player_id else None
     is_host = bool(you and GAME.host_id == you.id)   # <- NEW
     your_action = GAME.current_actions.get(player_id, "") if player_id else ""
-    actions_for_state = [
-        {
-            "id": pid,
-            "name": (GAME.players.get(pid).name if pid in GAME.players else pid[:8]),
+    actions_for_state = []
+    for pid, txt in GAME.current_actions.items():
+        p = GAME.players.get(pid)
+        name = p.name if p else "Someone"
+        actions_for_state.append({
+            "name": name,
             "text": txt,
+            "is_you": bool(player_id and pid == player_id),
+        })
+
+    you_obj = None
+    if you:
+        you_obj = {
+            "name": you.name,
+            "archetype": you.char_class or "",
+            "abilities": list(you.abilities),
+            "equipment": list(getattr(you, "equipment", []) or []),
+            "status": you.status or "Healthy",
         }
-        for pid, txt in GAME.current_actions.items()
-    ]
 
     return {
         "turn": GAME.turn_number,
         "scenario": GAME.current_scenario,
         "summary": GAME.last_summary,
         "party": [{
-            "id": p.id,
             "name": p.name,
-            "power": p.power,
             "archetype": (p.char_class or ""),
             "status": (p.status or "Healthy"),
+            "is_you": bool(player_id and p.id == player_id),
         } for p in active],
         "your_action": your_action,
+        "you": you_obj,
         "actions": actions_for_state,
         "actions_submitted": len(GAME.current_actions),
         "resolving": GAME.resolving,
@@ -382,13 +586,13 @@ async def join(req: Request):
     if JOIN_CODE and code != JOIN_CODE:
         return JSONResponse({"error": "Invalid join code."}, status_code=403)
 
-    # scale power to party
-    active = GAME.active_players()
-    power = sum([p.power for p in active]) / len(active) if active else 1.0
     char_class = await choose_class_with_ollama(background)
-    abilities = abilities_for_class(char_class, power, background)
+    abilities, equipment = await generate_sheet_with_ollama(background, char_class)
 
-    p = Player(name, background, power, abilities, char_class=char_class)
+    # Generate an auth token for this player
+    import secrets
+    token = secrets.token_urlsafe(24)
+    p = Player(name, background, abilities, char_class=char_class, token=token, equipment=equipment)
     GAME.players[p.id] = p
     if GAME.host_id is None:
         GAME.host_id = p.id
@@ -397,16 +601,33 @@ async def join(req: Request):
     if GAME.turn_number == 0 and not GAME.current_scenario:
         async with GAME.lock:                         
             if GAME.turn_number == 0 and not GAME.current_scenario:  
-                await ensure_initial_scene()
-    return {"player_id": p.id, "name": p.name}
+                try:
+                    await ensure_initial_scene()
+                except OllamaUnavailable:
+                    # Roll back player creation so we don't keep a ghost player
+                    try:
+                        if p.id in GAME.players:
+                            del GAME.players[p.id]
+                        if GAME.host_id == p.id:
+                            GAME.host_id = None
+                    finally:
+                        # Re-raise to be handled by the global exception handler
+                        raise
+    return {"player_id": p.id, "player_token": p.token, "name": p.name}
 
 @app.post("/action")
 async def submit_action(req: Request):
     data = await req.json()
     pid = data.get("player_id")
     text = (data.get("text") or "").strip()
+    player = auth_get_player_from_body(data)
     if not pid or pid not in GAME.players:
         return JSONResponse({"error": "Invalid player."}, status_code=400)
+    if player is None:
+        # Distinguish missing token vs invalid
+        if not data.get("player_token"):
+            return JSONResponse({"error": "Auth token required."}, status_code=401)
+        return JSONResponse({"error": "Invalid auth token."}, status_code=403)
     if not text:
         GAME.current_actions.pop(pid, None)
     else:
@@ -420,6 +641,11 @@ async def leave(req: Request):
     pid = data.get("player_id")
     if not pid or pid not in GAME.players:
         return JSONResponse({"error": "Invalid player."}, status_code=400)
+    player = auth_get_player_from_body(data)
+    if player is None:
+        if not data.get("player_token"):
+            return JSONResponse({"error": "Auth token required."}, status_code=401)
+        return JSONResponse({"error": "Invalid auth token."}, status_code=403)
 
     GAME.current_actions.pop(pid, None)
     departing_host = pid == GAME.host_id
@@ -440,6 +666,11 @@ async def resolve_turn(req: Request):
     pid = body.get("player_id")
     if not pid or pid not in GAME.players:
         return JSONResponse({"error": "Invalid player."}, status_code=400)
+    player = auth_get_player_from_body(body)
+    if player is None:
+        if not body.get("player_token"):
+            return JSONResponse({"error": "Auth token required."}, status_code=401)
+        return JSONResponse({"error": "Invalid auth token."}, status_code=403)
     if not ALLOW_ANYONE_TO_RESOLVE and pid != GAME.host_id:
         return JSONResponse({"error": "Only the host can resolve turns."}, status_code=403)
 
@@ -471,7 +702,7 @@ async def ensure_initial_scene():
             {"role": "system", "content": GM_SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
         ],
-        options={"temperature": 0.8, "num_ctx": 4096}
+        options={"temperature": 0.8, "num_ctx": 8192}
     )
     scene = normalize_narration(scene)
     GAME.turn_number = 1
@@ -483,8 +714,13 @@ async def ensure_initial_scene():
             {"role": "system", "content": SUMMARIZER_SYSTEM},
             {"role": "user", "content": SUMMARIZER_USER_TMPL.format(prior="", narr=scene, party=party)},
         ],
-        options={"temperature": 0.2, "num_ctx": 2048}
+        options={"temperature": 0.2, "num_ctx": 8192}
     )
+    # Update per-player statuses based on the initial scene/summary
+    try:
+        await update_party_statuses_with_ollama(GAME.last_summary, scene)
+    except Exception:
+        pass
 
 async def do_resolution():
     # if no scene, create one
@@ -501,7 +737,7 @@ async def do_resolution():
             {"role": "system", "content": GM_SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
         ],
-        options={"temperature": 0.8, "num_ctx": 4096}
+        options={"temperature": 0.8, "num_ctx": 8192}
     )
     narration = normalize_narration(narration)
 
@@ -520,13 +756,19 @@ async def do_resolution():
             {"role": "system", "content": SUMMARIZER_SYSTEM},
             {"role": "user", "content": SUMMARIZER_USER_TMPL.format(prior=GAME.last_summary, narr=narration, party=party)},
         ],
-        options={"temperature": 0.2, "num_ctx": 2048}
+        options={"temperature": 0.2, "num_ctx": 8192}
     )
 
     GAME.last_summary = new_summary
     GAME.turn_number += 1
     GAME.current_scenario = narration
     GAME.current_actions.clear()
+
+    # Ask Ollama to minimally update statuses based on new events
+    try:
+        await update_party_statuses_with_ollama(GAME.last_summary, GAME.current_scenario)
+    except Exception:
+        pass
 
 # -----------------------------
 # Minimal single-page client
@@ -536,7 +778,7 @@ HTML_PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Ollama Fantasy Party</title>
+<title>Nils's Online RPG</title>
 <link rel="icon" type="image/png" href="/favicon.ico"/>
 <style>
 :root{
@@ -572,7 +814,7 @@ footer{margin-top:20px;color:#7b8b9b}
 <div id="busy" class="small" style="display:none;position:fixed;top:10px;right:10px;background:#12202f;border:1px solid #1e3146;border-radius:8px;padding:4px 8px;z-index:1000">⏳ thinking…</div>
 <div class="container">
   <header>
-    <div class="brand">⚔️ Ollama Fantasy Party</div>
+    <div class="brand">⚔️ Nils's Online RPG</div>
     <div class="small" id="serverInfo"></div>
   </header>
 
@@ -594,7 +836,7 @@ footer{margin-top:20px;color:#7b8b9b}
     </div>
     <div class="row" style="margin-top:10px">
       <button id="joinBtn" onclick="doJoin()">Enter the world</button>
-      <div class="small">Your power/abilities will auto-balance to the party.</div>
+      <div class="small">Your abilities will be generated from your background.</div>
     </div>
   </div>
 
@@ -625,26 +867,24 @@ footer{margin-top:20px;color:#7b8b9b}
         <h3>Party</h3>
         <div id="party"></div>
         <hr/>
+        <h4>Your Character</h4>
+        <div id="youPanel" class="small"></div>
+        <hr/>
         <h4>Submitted Actions</h4>
         <div id="actions" class="small"></div>
       </aside>
     </div>
 
-    <section class="card" style="margin-top:16px">
-      <h3>How friends join</h3>
-      <div class="small">Share this URL: <code id="shareURL"></code></div>
-      <div class="small">If you're exposing to the internet, forward port <b>8000</b> to this machine and allow it in Windows Defender Firewall.</div>
-    </section>
+    <footer class="small">
+      Tip: anyone can click "Resolve turn" if the host enabled it. Otherwise, actions auto-collect until the host resolves.
+    </footer>
   </div>
-
-  <footer class="small">
-    Tip: anyone can click “Resolve turn” if the host enabled it. Otherwise, actions auto-collect until the host resolves.
-  </footer>
 </div>
 
 <script>
 const S = {
   player_id: localStorage.getItem("player_id") || "",
+  player_token: localStorage.getItem("player_token") || "",
   name: localStorage.getItem("name") || "",
   pollMs: 2000,
   joinCodeRequired: false,
@@ -658,6 +898,7 @@ const S = {
 
 function qs(id){return document.getElementById(id)}
 function show(id, v){qs(id).style.display = v ? "" : "none"}
+function t(el, s){ if(el){ el.textContent = (s===undefined||s===null) ? '' : String(s); } }
 
 function updateBusy(){
   show("busy", S.pendingOps > 0 || S.serverResolving);
@@ -704,11 +945,17 @@ async function api(path, opts={}){
 }
 
 async function load(){
-  qs("serverInfo").textContent = "Model: " + (new URLSearchParams(location.search).get("model") || "local Ollama");
-  qs("shareURL").textContent = location.href;
+  t(qs("serverInfo"), "Model: " + (new URLSearchParams(location.search).get("model") || "local Ollama"));
 
   const state = await api("/state" + (S.player_id ? ("?player_id="+encodeURIComponent(S.player_id)) : ""));
   S.joinCodeRequired = !!state.join_code_required;
+
+  // If we have an id but no token (from older sessions), treat as logged out
+  if(S.player_id && !S.player_token){
+    try{ alert("Your session needs an update. Please re-join to continue."); }catch(_){ }
+    localStorage.removeItem("player_id");
+    S.player_id = "";
+  }
 
   if(!S.player_id){
     show("join", true);
@@ -723,8 +970,8 @@ async function load(){
 }
 
 function render(state){
-  qs("turn").textContent = state.turn || "–";
-  qs("pcnt").textContent = (state.party||[]).length;
+  t(qs("turn"), state.turn || "-");
+  t(qs("pcnt"), (state.party||[]).length);
   qs("scenario").textContent = state.scenario || "Waiting for the first scene…";
   const _sum = qs("summary"); if(_sum) _sum.textContent  = state.summary || "(none yet)";
   qs("resolving").style.display = state.resolving ? "" : "none";
@@ -747,13 +994,40 @@ function render(state){
     submitBtn.textContent = hasAction ? "Submit again" : "Submit";
   }
 
-  qs("party").innerHTML = (state.party||[]).map(p => {
-    const you = p.id === S.player_id ? ' <span class="badge you">you</span>' : '';
-    return `<div class="row" style="justify-content:space-between">
-      <div>${p.name}${you}</div>
-      <div class="small">${p.archetype} <span class="badge">${p.power}×</span></div>
-    </div>`;
-  }).join("") || "<div class='small'>(empty)</div>";
+  // Safely render party without using innerHTML for untrusted data
+  (function renderParty(){
+    const partyEl = qs("party");
+    if(!partyEl) return;
+    partyEl.innerHTML = "";
+    const list = state.party || [];
+    if(!list.length){
+      partyEl.innerHTML = "<div class='small'>(empty)</div>";
+      return;
+    }
+    list.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.justifyContent = 'space-between';
+
+      const left = document.createElement('div');
+      left.textContent = p.name || '';
+      if(p.is_you){
+        const you = document.createElement('span');
+        you.className = 'badge you';
+        you.textContent = 'you';
+        left.appendChild(document.createTextNode(' '));
+        left.appendChild(you);
+      }
+
+      const right = document.createElement('div');
+      right.className = 'small';
+      right.textContent = p.archetype || '';
+
+      row.appendChild(left);
+      row.appendChild(right);
+      partyEl.appendChild(row);
+    });
+  })();
 
   // Append status badges without altering structure
   try{
@@ -785,8 +1059,8 @@ function render(state){
         const ul = document.createElement('ul');
         actions.forEach(a => {
           const li = document.createElement('li');
-          let who = a.name || (a.id || '').slice(0,8);
-          if(a.id === S.player_id) who += " (you)";
+          let who = a.name || '';
+          if(a.is_you) who += " (you)";
           const strong = document.createElement('b');
           strong.textContent = who + ": ";
           li.appendChild(strong);
@@ -795,6 +1069,53 @@ function render(state){
         });
         actionsEl.innerHTML = "";
         actionsEl.appendChild(ul);
+      }
+    }
+  }catch(_){ /* ignore DOM issues */ }
+
+  // Render Your Character panel (abilities + equipment)
+  try{
+    const yp = qs('youPanel');
+    if(yp){
+      yp.innerHTML = '';
+      const you = state.you || null;
+      if(!you){
+        yp.textContent = '(join to view)';
+      }else{
+        // Abilities
+        const labA = document.createElement('label');
+        labA.textContent = 'Abilities';
+        yp.appendChild(labA);
+        const ulA = document.createElement('ul');
+        (you.abilities||[]).forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = item;
+          ulA.appendChild(li);
+        });
+        if(!ulA.childElementCount){
+          const li = document.createElement('li');
+          li.textContent = '(none)';
+          ulA.appendChild(li);
+        }
+        yp.appendChild(ulA);
+
+        // Equipment
+        const labE = document.createElement('label');
+        labE.textContent = 'Equipment';
+        labE.style.marginTop = '8px';
+        yp.appendChild(labE);
+        const ulE = document.createElement('ul');
+        (you.equipment||[]).forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = item;
+          ulE.appendChild(li);
+        });
+        if(!ulE.childElementCount){
+          const li = document.createElement('li');
+          li.textContent = '(none)';
+          ulE.appendChild(li);
+        }
+        yp.appendChild(ulE);
       }
     }
   }catch(_){ /* ignore DOM issues */ }
@@ -816,8 +1137,9 @@ async function doJoin(){
   busy(true);
   try{
     const res = await api("/join", {method:"POST", body: JSON.stringify({name, background, code})});
-    S.player_id = res.player_id; S.name = res.name;
+    S.player_id = res.player_id; S.player_token = res.player_token; S.name = res.name;
     localStorage.setItem("player_id", S.player_id);
+    localStorage.setItem("player_token", S.player_token);
     localStorage.setItem("name", S.name);
     show("join", false); show("game", true);
     refresh();
@@ -835,7 +1157,7 @@ async function submitAction(){
   btnBusy("submitBtn", true, "Submitting...");
   busy(true);
   try{
-    await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, text})});
+    await api("/action", {method:"POST", body: JSON.stringify({player_id: S.player_id, player_token: S.player_token, text})});
     S.actionDirty = false;
     S.submittedOnce = true;
     await refresh();
@@ -853,12 +1175,14 @@ async function leaveGame(){
   btnBusy("leaveBtn", true, "Leaving...");
   busy(true);
   try{
-    await api("/leave", {method:"POST", body: JSON.stringify({player_id: S.player_id})});
+    await api("/leave", {method:"POST", body: JSON.stringify({player_id: S.player_id, player_token: S.player_token})});
   }catch(e){
     console.warn(e);
   }finally{
     S.player_id = "";
+    S.player_token = "";
     localStorage.removeItem("player_id");
+    localStorage.removeItem("player_token");
     show("join", true);
     show("game", false);
     busy(false);
@@ -873,7 +1197,7 @@ async function resolveNow(){
   busy(true);
   try{
     show("resolving", true);
-    await api("/resolve", {method:"POST", body: JSON.stringify({player_id: S.player_id})});
+    await api("/resolve", {method:"POST", body: JSON.stringify({player_id: S.player_id, player_token: S.player_token})});
   }catch(e){
     alert("Resolve failed: " + e.message);
   }finally{
@@ -897,3 +1221,5 @@ if __name__ == "__main__":
     import uvicorn
     print(f"Starting on http://{BIND_HOST}:{BIND_PORT}  (model={OLLAMA_MODEL})")
     uvicorn.run(app, host=BIND_HOST, port=BIND_PORT)
+
+
