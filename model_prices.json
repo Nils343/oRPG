@@ -1,0 +1,212 @@
+{
+  "source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "currency": "USD",
+  "updated_at": "2025-09-20",
+  "text": {
+    "unit": "per_million_tokens",
+    "models": {
+      "gemini-2.5-pro": {
+        "prompt": [
+          {"max_prompt_tokens": 200000, "usd_per_million": 1.25},
+          {"max_prompt_tokens": null, "usd_per_million": 2.5}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 200000, "usd_per_million": 10.0},
+          {"max_prompt_tokens": null, "usd_per_million": 15.0}
+        ]
+      },
+      "gemini-2.5-flash": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.3}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 2.5}
+        ]
+      },
+      "gemini-2.5-flash-lite": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.1}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.4}
+        ]
+      },
+      "gemini-2.0-flash": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.1}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.4}
+        ]
+      },
+      "gemini-2.0-flash-lite": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.075}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.3}
+        ]
+      },
+      "gemini-1.5-pro": {
+        "prompt": [
+          {"max_prompt_tokens": 128000, "usd_per_million": 1.25},
+          {"max_prompt_tokens": null, "usd_per_million": 2.5}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 128000, "usd_per_million": 5.0},
+          {"max_prompt_tokens": null, "usd_per_million": 10.0}
+        ]
+      },
+      "gemini-1.5-flash": {
+        "prompt": [
+          {"max_prompt_tokens": 128000, "usd_per_million": 0.075},
+          {"max_prompt_tokens": null, "usd_per_million": 0.15}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 128000, "usd_per_million": 0.3},
+          {"max_prompt_tokens": null, "usd_per_million": 0.6}
+        ]
+      },
+      "gemini-1.5-flash-8b": {
+        "prompt": [
+          {"max_prompt_tokens": 128000, "usd_per_million": 0.0375},
+          {"max_prompt_tokens": null, "usd_per_million": 0.075}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 128000, "usd_per_million": 0.15},
+          {"max_prompt_tokens": null, "usd_per_million": 0.3}
+        ]
+      },
+      "grok-4-fast-reasoning": {
+        "prompt": [
+          {"max_prompt_tokens": 2000000, "usd_per_million": 0.2, "notes": "Text tokens"}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 2000000, "usd_per_million": 0.5}
+        ],
+        "metadata": {
+          "description": "Fast Grok 4 variant with reasoning capabilities.",
+          "access": "API usage-based; part of SuperGrok offerings.",
+          "context_window_tokens": 2000000,
+          "notes": "No image input cost."
+        }
+      },
+      "grok-4-fast-non-reasoning": {
+        "prompt": [
+          {"max_prompt_tokens": 2000000, "usd_per_million": 0.2, "notes": "Text tokens"}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 2000000, "usd_per_million": 0.5}
+        ],
+        "metadata": {
+          "description": "Fast Grok 4 variant without reasoning overhead.",
+          "access": "API usage-based; part of SuperGrok plans.",
+          "context_window_tokens": 2000000,
+          "notes": "No image input cost."
+        }
+      },
+      "grok-code-fast-1": {
+        "prompt": [
+          {"max_prompt_tokens": 256000, "usd_per_million": 0.2, "notes": "Text tokens"}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 256000, "usd_per_million": 1.5}
+        ],
+        "metadata": {
+          "description": "Coding-optimized Grok model with fast throughput.",
+          "access": "API usage-based; included in SuperGrok subscriptions.",
+          "context_window_tokens": 256000,
+          "notes": "No image input cost."
+        }
+      },
+      "grok-4": {
+        "prompt": [
+          {"max_prompt_tokens": 256000, "usd_per_million": 3.0, "notes": "Text tokens"}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 256000, "usd_per_million": 15.0}
+        ],
+        "metadata": {
+          "description": "Flagship Grok 4 model with reasoning and multimodal tooling.",
+          "access": "API usage-based; available to SuperGrok and X Premium+ subscribers.",
+          "context_window_tokens": 256000
+        }
+      },
+      "grok-3": {
+        "prompt": [
+          {"max_prompt_tokens": 132000, "usd_per_million": 3.0, "notes": "Text tokens"}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 132000, "usd_per_million": 15.0}
+        ],
+        "metadata": {
+          "description": "Grok 3 model for enterprise reasoning tasks.",
+          "access": "API usage-based; free access with quotas on X/Grok apps.",
+          "context_window_tokens": 132000
+        }
+      },
+      "grok-3-mini": {
+        "prompt": [
+          {"max_prompt_tokens": 132000, "usd_per_million": 0.3, "notes": "Text tokens"}
+        ],
+        "completion": [
+          {"max_prompt_tokens": 132000, "usd_per_million": 0.5}
+        ],
+        "metadata": {
+          "description": "Lightweight Grok 3 variant for math/reasoning tasks.",
+          "access": "API usage-based; select app integrations.",
+          "context_window_tokens": 132000
+        }
+      }
+    }
+  },
+  "image": {
+    "unit": "per_image",
+    "models": {
+      "gemini-2.5-flash-image-preview": {
+        "standard": {
+          "usd_per_image": 0.039,
+          "tokens_per_image": 1290,
+          "notes": "Standard synchronous calls; based on $30 per 1M output tokens."
+        },
+        "batch": {
+          "usd_per_image": 0.0195,
+          "tokens_per_image": 1290,
+          "notes": "Batch generation pricing."
+        }
+      },
+      "grok-2-image-1212": {
+        "standard": {
+          "usd_per_image": 0.07,
+          "tokens_per_image": null,
+          "notes": "Grok image generation model; no text input token costs. Context window approx 131k tokens."
+        }
+      }
+    }
+  },
+  "narration": {
+    "unit": "per_million_characters",
+    "models": {
+      "eleven_flash_v2_5": {
+        "usd_per_million": 50.0,
+        "credits_per_character": 0.5,
+        "notes": "Flash low-latency model; official pricing from https://elevenlabs.io/pricing."
+      },
+      "eleven_turbo_v2_5": {
+        "usd_per_million": 50.0,
+        "credits_per_character": 0.5,
+        "notes": "Turbo low-latency model; 0.5 credits per character per ElevenLabs pricing docs."
+      },
+      "eleven_multilingual_v2": {
+        "usd_per_million": 100.0,
+        "credits_per_character": 1.0,
+        "notes": "High-quality multilingual model; highest-quality tiers consume 1 credit per character per official pricing."
+      },
+      "eleven_v3": {
+        "usd_per_million": 100.0,
+        "credits_per_character": 1.0,
+        "notes": "Eleven v3 (alpha) shares the highest-quality credit rate per the public pricing guidance."
+      }
+    }
+  }
+}

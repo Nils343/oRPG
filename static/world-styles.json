@@ -1,0 +1,165 @@
+[
+  {
+    "name": "Fantasy",
+    "children": [
+      "High Fantasy",
+      "Low Fantasy",
+      "Dark Fantasy",
+      "Sword and Sorcery",
+      "Urban Fantasy",
+      "Gaslamp Fantasy",
+      "Fairy Tale and Folklore",
+      "Mythic Legends",
+      "Wuxia and Xianxia"
+    ]
+  },
+  {
+    "name": "Science Fiction",
+    "children": [
+      "Hard Science Fiction",
+      "Space Opera",
+      "Military Science Fiction",
+      "Cyberpunk",
+      "Biopunk",
+      "Solarpunk",
+      "Dystopian Future",
+      "Utopian Future",
+      "Time Travel",
+      "Mecha and AI",
+      "Transhuman Far Future",
+      "Planetary Romance"
+    ]
+  },
+  {
+    "name": "Post-Apocalyptic",
+    "children": [
+      "Nuclear Wasteland",
+      "Pandemic Zombie",
+      "Climate Collapse",
+      "Alien Invasion Aftermath",
+      "Resource Scarcity",
+      "Magic After the Fall",
+      "Post-Industrial Ruin"
+    ]
+  },
+  {
+    "name": "Horror and Supernatural",
+    "children": [
+      "Gothic Horror",
+      "Cosmic Lovecraftian",
+      "Folk Horror",
+      "Occult Thriller",
+      "Survival Horror",
+      "Monster Hunters",
+      "Urban Gothic",
+      "Ghost Stories"
+    ]
+  },
+  {
+    "name": "Historical and Alternate History",
+    "children": [
+      "Prehistoric and Ancient",
+      "Medieval Realism",
+      "Renaissance Europe",
+      "Age of Sail Swashbuckling",
+      "Victorian Edwardian",
+      "Pulp Interwar",
+      "World Wars and Cold War",
+      "Samurai Japan Historical",
+      "Alternate History with Magic"
+    ]
+  },
+  {
+    "name": "Modern and Contemporary",
+    "children": [
+      "Crime and Noir",
+      "Heists and Capers",
+      "Espionage and Black Ops",
+      "Urban Sandbox",
+      "Conspiracy Thriller",
+      "Slice of Life Cozy",
+      "Techno Thriller",
+      "Paramilitary Action"
+    ]
+  },
+  {
+    "name": "Superheroes",
+    "children": [
+      "Four Color Heroic",
+      "Street Level Vigilantes",
+      "Dark Antihero",
+      "Teen Academy Team",
+      "Government Agency Supers"
+    ]
+  },
+  {
+    "name": "Adventure and Pulp",
+    "children": [
+      "Lost Worlds and Dinosaurs",
+      "Tomb Raiding Archaeology",
+      "Jungle and Desert Exploration",
+      "Airship Sky Pirates"
+    ]
+  },
+  {
+    "name": "Western and Frontiers",
+    "children": [
+      "Classic Western",
+      "Weird West",
+      "Space Western",
+      "Frontier Colonization"
+    ]
+  },
+  {
+    "name": "Whimsical and Lighthearted",
+    "children": [
+      "Magical School",
+      "Cozy Fantasy",
+      "Fairy Garden",
+      "Talking Animals and Familiars",
+      "Unicorn Realms",
+      "Cartoon Comedy Worlds"
+    ]
+  },
+  {
+    "name": "Cultural and Regional Worlds",
+    "children": [
+      "Arabian Nights and Desert Kingdoms",
+      "Celtic and Norse Mythic",
+      "Slavic and Baltic Folklore",
+      "East Asian Fantasy",
+      "South Asian Mythic",
+      "African Mythic",
+      "Mesoamerican Inspired",
+      "Polynesian Pacific Mythic",
+      "Indigenous North American Mythic"
+    ]
+  },
+  {
+    "name": "Hybrid and Cross-Genre",
+    "children": [
+      "Science Fantasy",
+      "Steampunk",
+      "Dieselpunk",
+      "Atompunk",
+      "Clockpunk",
+      "Silkpunk",
+      "Mythpunk",
+      "Dungeonpunk"
+    ]
+  },
+  {
+    "name": "World Structure and Biomes",
+    "children": [
+      "City of Intrigue Megacity",
+      "Wilderness Sandbox Hexcrawl",
+      "Underworld and Caverns",
+      "Underwater Civilizations",
+      "Planar Travel Multiverse",
+      "Generation Ship Habitat",
+      "Megastructure Ringworld",
+      "Hollow Earth",
+      "Floating Islands Sky Archipelago"
+    ]
+  }
+]

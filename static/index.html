@@ -3,97 +3,251 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LAN RPG</title>
+<title>Nils&#39; RPG</title>
+<link rel="icon" href="/favicon.ico" sizes="any" />
 <style>
   :root { --bg:#0f1117; --card:#161a22; --muted:#8b93a7; --fg:#e6e9ef; --accent:#7aa2f7; --accent2:#89dceb; --bad:#f7768e; --ok:#9ece6a; --warn:#e0af68; }
+  /* FX saver mode: kill blur/translucency that can break cursor compositing on some GPUs */
+  :root.nofx * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    filter: none !important;
+    box-shadow: none !important;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif; background: var(--bg); color: var(--fg); }
+  body { margin:0; font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif; min-height:100vh; background:
+    radial-gradient(circle at 18% 16%, rgba(137,220,235,0.18), transparent 60%),
+    radial-gradient(circle at 82% 8%, rgba(122,162,247,0.14), transparent 65%),
+    radial-gradient(circle at 50% 100%, rgba(158,206,106,0.1), transparent 70%),
+    var(--bg);
+    color: var(--fg); }
   header { display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; border-bottom:1px solid #222736; position: sticky; top:0; background: rgba(15,17,23,0.9); backdrop-filter: blur(6px); }
   header h1 { margin:0; font-size: 18px; letter-spacing:.5px; }
   button, select, input, textarea { background: var(--card); color: var(--fg); border:1px solid #262c3a; border-radius:8px; padding:8px 10px; }
+  textarea { resize: vertical; }
   button { cursor:pointer; }
   button[disabled] { opacity:.5; cursor:not-allowed; }
   .wrap { display:flex; gap:16px; padding:16px; }
   .col { display:flex; flex-direction:column; gap:16px; flex:1; min-width:280px; }
   .card { background: var(--card); border:1px solid #262c3a; border-radius:12px; padding:14px; }
+  .card[draggable="true"] { cursor: grab; }
+  .card.dragging { opacity: .6; }
+  .scenario-header { justify-content:space-between; margin-bottom:8px; }
+  .mini-toggle { font-size:12px; padding:4px 10px; border-radius:999px; line-height:1; border:1px solid #262c3a; background:var(--card); color:var(--muted); transition:color .2s ease, border-color .2s ease, background .2s ease; }
+  .mini-toggle[aria-pressed="true"], .mini-toggle.active { color:var(--accent); border-color:var(--accent); background:rgba(122,162,247,0.14); }
+  .mini-toggle:disabled { opacity:0.5; cursor:not-allowed; }
+  .system-notice { display:none; margin:8px 16px 0; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.4; border:1px solid transparent; background:rgba(122,162,247,0.12); color:var(--accent); }
+  .system-notice.info { background:rgba(122,162,247,0.12); border-color:rgba(122,162,247,0.32); color:var(--accent2); }
+  .system-notice.error { background:rgba(247,118,142,0.14); border-color:rgba(247,118,142,0.4); color:var(--bad); }
+  .col.drag-target { outline: 1px dashed var(--accent2); }
+  .lane-drop { border:1px dashed #262c3a; border-radius:12px; min-height:120px; display:flex; align-items:center; justify-content:center; padding:14px; color: var(--muted); font-size:14px; }
+  .lane-drop.drag-target { border-color: var(--accent2); color: var(--accent2); }
   .muted { color: var(--muted); }
+  .hidden { display:none; }
+  .form-card .world-custom-input { width:100%; }
+  .world-style-picker { position:relative; display:flex; flex-direction:column; gap:6px; }
+  .world-style-trigger { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; background:var(--card); color:var(--fg); border:1px solid #262c3a; border-radius:8px; padding:8px 10px; cursor:pointer; font:inherit; text-align:left; }
+  .world-style-trigger:hover, .world-style-trigger:focus-visible { border-color:rgba(137,220,235,0.45); color:var(--accent2); outline:none; }
+  .world-style-trigger::after { content:"v"; font-size:11px; color:var(--muted); transition:transform .14s ease; }
+  .world-style-trigger[aria-expanded="true"]::after { transform:rotate(180deg); }
+  .world-style-menu { position:absolute; top:calc(100% + 6px); left:0; right:0; background:rgba(21,24,33,0.96); border:1px solid #262c3a; border-radius:12px; box-shadow:0 18px 32px rgba(5,7,13,0.55); max-height:260px; overflow-y:auto; padding:6px; display:flex; flex-direction:column; gap:4px; z-index:40; }
+  .world-style-menu.hidden { display:none; }
+  .world-style-option { display:flex; align-items:center; gap:10px; justify-content:flex-start; width:100%; padding:6px 10px; border-radius:10px; border:1px solid transparent; background:transparent; color:var(--fg); cursor:pointer; font:inherit; text-align:left; transition:all .12s ease; }
+  .world-style-option:hover, .world-style-option:focus-visible { border-color:rgba(137,220,235,0.3); background:rgba(137,220,235,0.12); outline:none; }
+  .world-style-option[data-selected="true"] { border-color:var(--accent2); background:rgba(137,220,235,0.18); }
+  .world-style-option.level-0 { font-weight:600; }
+  .world-style-option.level-1 { font-weight:500; }
+  .world-style-option.level-2 { font-size:13px; }
+  .world-style-option.level-3 { font-size:12px; }
+  .world-style-hint { margin-left:auto; font-size:11px; color:var(--muted); }
+  .world-style-group { display:flex; flex-direction:column; gap:4px; }
+  .world-style-group-header { display:flex; align-items:center; gap:6px; padding:2px 4px; border-radius:10px; }
+  .world-style-group-header:hover { background:rgba(137,220,235,0.06); }
+  .world-style-group-header .world-style-option { flex:1; padding:6px 8px; }
+  .world-style-expander { width:24px; height:24px; display:grid; place-items:center; border-radius:6px; border:1px solid transparent; background:transparent; color:var(--muted); cursor:pointer; font-size:12px; }
+  .world-style-expander:hover, .world-style-expander:focus-visible { border-color:rgba(137,220,235,0.3); color:var(--accent2); outline:none; }
+  .world-style-children { display:flex; flex-direction:column; gap:4px; margin-left:16px; }
+  .world-style-children.hidden { display:none; }
+  .join-layout { flex:none; width: min(720px, 100%); margin:8vh auto 6vh; position:relative; }
+  .join-layout::before, .join-layout::after { content:""; position:absolute; border-radius:50%; filter:blur(0); z-index:-2; opacity:0.55; }
+  .join-layout::before { width:320px; height:320px; top:-140px; left:-120px; background:radial-gradient(circle, rgba(122,162,247,0.35), rgba(15,17,23,0.1)); }
+  .join-layout::after { width:260px; height:260px; right:-110px; bottom:-120px; background:radial-gradient(circle, rgba(137,220,235,0.35), rgba(15,17,23,0.1)); }
+  .join-card { position:relative; overflow:hidden; padding:26px; background:linear-gradient(165deg, rgba(22,26,34,0.94), rgba(16,20,28,0.98)); border:1px solid rgba(122,162,247,0.2); box-shadow:0 28px 50px rgba(4,6,12,0.55); backdrop-filter: blur(12px); display:flex; flex-direction:column; gap:24px; border-radius:18px; }
+  .join-card::before { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; border:1px solid rgba(137,220,235,0.25); opacity:0.35; }
+  .join-card-header { display:flex; gap:18px; align-items:flex-start; }
+  .join-emblem { width:58px; height:58px; border-radius:18px; background:linear-gradient(140deg, rgba(122,162,247,0.32), rgba(137,220,235,0.18)); border:1px solid rgba(122,162,247,0.4); box-shadow:0 12px 28px rgba(11,15,24,0.8); position:relative; }
+  .join-emblem::after, .join-emblem::before { content:""; position:absolute; border-radius:999px; background:rgba(230,233,239,0.85); }
+  .join-emblem::before { width:4px; height:32px; top:13px; left:27px; opacity:0.45; }
+  .join-emblem::after { width:32px; height:4px; top:27px; left:13px; opacity:0.45; }
+  .join-eyebrow { display:inline-flex; text-transform:uppercase; letter-spacing:0.18em; font-size:11px; color:rgba(137,220,235,0.85); margin-bottom:4px; }
+  .join-subtitle { margin:6px 0 0 0; font-size:14px; color:rgba(230,233,239,0.78); line-height:1.5; }
+  .join-form { gap:18px; }
+  .join-label { font-size:13px; color:rgba(230,233,239,0.78); display:flex; flex-direction:column; gap:8px; }
+  #joinView input, #joinView textarea { width:100%; background:rgba(19,23,33,0.85); border:1px solid rgba(122,162,247,0.18); border-radius:10px; padding:12px 14px; transition:border-color .2s ease, box-shadow .2s ease, transform .15s ease; font-size:15px; }
+  #joinView input:focus, #joinView textarea:focus { outline:none; border-color:rgba(137,220,235,0.65); box-shadow:0 0 0 3px rgba(122,162,247,0.2); transform:translateY(-1px); }
+  #joinView textarea { min-height:108px; resize:vertical; }
+  .join-highlights { list-style:none; margin:0; padding:0; display:grid; gap:10px; font-size:13px; color:rgba(139,147,167,0.88); background:rgba(13,16,24,0.6); border:1px solid rgba(122,162,247,0.12); border-radius:10px; padding:16px 18px; }
+  .join-highlights li { position:relative; padding-left:18px; }
+  .join-highlights li::before { content:""; position:absolute; width:6px; height:6px; border-radius:50%; left:0; top:8px; background:rgba(137,220,235,0.9); box-shadow:0 0 0 4px rgba(137,220,235,0.15); }
+  .join-primary { background:linear-gradient(120deg, rgba(122,162,247,0.95) 0%, rgba(137,220,235,0.95) 100%); color:#0b0d13; border:none; border-radius:999px; padding:14px 18px; font-size:15px; font-weight:600; box-shadow:0 24px 32px rgba(8,11,20,0.55), 0 0 0 1px rgba(137,220,235,0.35); transition:transform .15s ease, box-shadow .2s ease; }
+  .join-primary:hover { transform:translateY(-1px); box-shadow:0 18px 28px rgba(12,16,25,0.6), 0 0 0 1px rgba(137,220,235,0.45); }
+  .join-primary:active { transform:translateY(0); box-shadow:0 12px 20px rgba(12,16,25,0.55), 0 0 0 1px rgba(137,220,235,0.4); }
+  .join-hint, .join-status { font-size:12px; color:rgba(139,147,167,0.9); line-height:1.5; }
+  .join-status { border-left:2px solid rgba(137,220,235,0.3); padding-left:10px; margin:0; }
+  @media (max-width: 640px) {
+    .join-layout { margin:5vh auto; padding:0 12px; }
+    .join-card { padding:22px; }
+    .join-card-header { flex-direction:column; align-items:flex-start; }
+  .join-emblem { width:52px; height:52px; border-radius:16px; }
+    .join-emblem::before { top:12px; left:24px; height:28px; }
+    .join-emblem::after { top:24px; left:12px; width:28px; }
+  }
   .row { display:flex; gap:10px; align-items:center; }
   .right { margin-left:auto; }
-  #joinView input, #joinView textarea { width:100%; }
-  #scenario { white-space:pre-wrap; line-height:1.4; }
-  #players li { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed #222736; }
+  #scenario { white-space:pre-wrap; line-height:1.4; overflow-y:auto; max-height:60vh; padding-right:6px; }
+  .scenario-block { white-space:pre-wrap; margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid rgba(122,162,247,0.2); }
+  .scenario-block:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
+  @keyframes blinkCursor { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+  #players li { display:flex; align-items:center; gap:12px; padding:6px 0; border-bottom:1px dashed #222736; }
   #players li:last-child { border-bottom: none; }
+  .player-main { display:flex; align-items:center; gap:12px; flex:1; min-width:0; }
+  .player-portrait { width:40px; height:40px; border-radius:10px; border:1px solid #283048; background:#131722; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; color: var(--muted); overflow:hidden; cursor:pointer; padding:0; transition: border-color .2s ease, color .2s ease; }
+  .player-portrait.has-image { background-size:cover; background-position:center; color:transparent; }
+  .player-portrait[data-clickable="false"] { cursor:default; opacity:0.6; border-color:#222736; }
+  .player-portrait[data-clickable="true"]:hover { border-color: var(--accent2); color: var(--accent2); }
+  .portrait-preview { position:fixed; z-index:9999; display:none; pointer-events:none; border:1px solid rgba(137,220,235,0.7); border-radius:12px; background: rgba(10,12,19,0.92); box-shadow:0 18px 48px rgba(0,0,0,0.45); padding:10px; max-width:min(320px, 50vw); max-height:min(320px, 50vh); }
+  .portrait-preview img { display:block; width:100%; height:auto; max-height:calc(min(320px, 50vh) - 20px); border-radius:8px; }
   .pill { padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #2a3142; }
+  .player-status { display:inline-flex; align-items:center; white-space:nowrap; }
   .good { color: var(--ok); border-color: var(--ok); }
   .warn { color: var(--warn); border-color: var(--warn); }
   .bad { color: var(--bad); border-color: var(--bad); }
   .stack { display:flex; flex-direction:column; gap:8px; }
   .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
   img#scene { width:100%; border-radius:10px; border:1px solid #262c3a; }
+  .player-name { display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .player-name-row { display:flex; align-items:center; gap:8px; min-width:0; }
+  .player-name-main { font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .player-class { font-size: 13px; color: var(--muted); }
+  .player-tags { display:flex; flex-wrap:wrap; gap:6px; }
+  .list-note { list-style:none; font-size:12px; color: var(--muted); padding-left:0; margin-left:0; }
+  .list-note::marker { content:""; }
   /* Modal */
   .modalBack { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
   .modal { width:min(720px, 92vw); background: var(--card); border:1px solid #2a3142; border-radius:12px; padding:16px; }
   .modal h3 { margin-top:0; }
+  .modal.dev-info-modal { width:calc(100vw - 24px); max-width:calc(100vw - 24px); height:calc(100vh - 24px); max-height:calc(100vh - 24px); display:flex; flex-direction:column; padding:20px; overflow:hidden; }
+  .dev-info-grid { display:flex; flex-direction:row; gap:16px; flex:1 1 auto; flex-wrap:nowrap; align-items:stretch; min-height:0; width:100%; }
+  .dev-info-section { background:rgba(18,22,32,0.95); border:1px solid #1f2534; border-radius:10px; padding:12px; flex:1 1 0%; min-width:320px; min-width:0; display:flex; flex-direction:column; min-height:0; height:100%; overflow:hidden; }
+  .dev-info-section h4 { margin:0 0 8px; font-size:14px; letter-spacing:0.04em; text-transform:uppercase; color:var(--muted); }
+  .dev-info-pre { margin:0; background:rgba(12,16,24,0.92); border:1px solid #262c3a; border-radius:8px; padding:12px; flex:1 1 0%; overflow-y:scroll; overflow-x:auto; min-height:0; min-width:0; width:100%; height:100%; font-family:"JetBrains Mono", Consolas, "SFMono-Regular", monospace; font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:break-word; scrollbar-gutter:stable; }
   .tip { font-size: 12px; color: var(--muted); }
   .tooltip { border-bottom:1px dashed var(--muted); cursor:help; }
+  .stats-summary { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+  .stat-chip { flex:1 1 160px; background: linear-gradient(135deg, rgba(122,162,247,0.15), rgba(137,220,235,0.08)); border:1px solid #283048; border-radius:10px; padding:12px 14px; }
+  .stat-chip-label { font-size:12px; letter-spacing:0.05em; text-transform:uppercase; color: var(--muted); display:block; margin-bottom:6px; }
+  .stat-chip-value { font-size:22px; font-weight:600; color: var(--fg); }
+  .stats-actions { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:16px; }
+  .stat-card { background: var(--card); border:1px solid #1f2534; border-radius:10px; padding:12px 14px; box-shadow:0 4px 12px rgba(0,0,0,0.18); }
+  .stat-label { font-size:12px; letter-spacing:0.04em; text-transform:uppercase; color: var(--muted); margin-bottom:6px; display:block; }
+  .stat-value { font-size:18px; font-weight:500; color: var(--fg); }
+  .empty-state { font-size:14px; color: var(--muted); margin:16px 0; }
+  .settings-modal { padding:0; background: radial-gradient(circle at top left, rgba(122,162,247,0.16), rgba(15,17,23,0.9)); border:1px solid #283048; box-shadow:0 28px 60px rgba(0,0,0,0.45); overflow:hidden; }
+  .settings-header { display:flex; align-items:flex-start; justify-content:space-between; padding:24px 28px 20px; background: linear-gradient(135deg, rgba(21,25,35,0.95), rgba(13,15,22,0.92)); border-bottom:1px solid #1f2534; }
+  .settings-header h3 { margin:0; font-size:22px; }
+  .settings-header .tip { margin:6px 0 0; font-size:13px; }
+  .icon-button { width:36px; height:36px; display:grid; place-items:center; border-radius:50%; padding:0; border:1px solid transparent; background:rgba(122,162,247,0.08); color: var(--muted); font-size:20px; cursor:pointer; transition:all .15s ease; }
+  .icon-button:hover { color: var(--fg); border-color:rgba(122,162,247,0.45); background:rgba(122,162,247,0.18); }
+  .settings-body { padding:24px 28px; display:flex; flex-direction:column; gap:20px; max-height:65vh; overflow-y:auto; backdrop-filter: blur(4px); }
+  .form-card { background: rgba(21,24,33,0.86); border:1px solid #242c3c; border-radius:14px; padding:20px; box-shadow:0 14px 32px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:16px; }
+  .form-card h4 { margin:0; font-size:15px; letter-spacing:0.08em; text-transform:uppercase; color: var(--muted); }
+  .form-card label { font-size:14px; font-weight:500; color: var(--fg); display:flex; flex-direction:column; gap:6px; }
+  .form-card .tip { margin-top:2px; }
+  .settings-body .grid2 { gap:16px; }
+  .settings-footer { padding:16px 28px 24px; border-top:1px solid #1f2534; background: rgba(15,17,23,0.92); display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  .share-chip { display:flex; flex-direction:column; gap:6px; background: rgba(122,162,247,0.12); border:1px solid rgba(122,162,247,0.35); border-radius:12px; padding:12px 16px; min-width:240px; }
+  .share-chip span { font-size:12px; letter-spacing:0.06em; text-transform:uppercase; color: var(--muted); }
+  .share-chip code { font-family: "JetBrains Mono", Consolas, "SFMono-Regular", monospace; font-size:13px; color: var(--accent2); background: rgba(10,12,19,0.6); border-radius:8px; padding:4px 8px; word-break: break-word; }
+  button.primary { background: linear-gradient(135deg, rgba(122,162,247,0.95), rgba(137,220,235,0.85)); border-color: rgba(137,220,235,0.4); color:#05070d; font-weight:600; padding:10px 20px; box-shadow:0 16px 32px rgba(122,162,247,0.35); transition: transform .15s ease, box-shadow .15s ease; }
+  button.primary:hover { transform: translateY(-1px); box-shadow:0 20px 38px rgba(122,162,247,0.45); }
+  button.primary:active { transform: translateY(0); box-shadow:0 12px 26px rgba(122,162,247,0.3); }
+  .settings-footer button.primary { margin-left:auto; }
+  @media (max-width: 640px) {
+    .settings-header, .settings-body, .settings-footer { padding-left:20px; padding-right:20px; }
+    .settings-body { max-height:70vh; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>LAN RPG</h1>
+  <h1>Nils&#39; RPG <span id="turnHeader" class="muted" style="font-size:14px; margin-left:12px;">Turn 0</span></h1>
   <div class="row">
     <span id="lockBanner" class="muted"></span>
-    <button id="btnSettings">Settings</button>
+    <button id="btnStats" data-i18n="header.stats">Statistics</button>
+    <button id="btnDevInfo" data-i18n="header.devInfo">Developer info</button>
+    <button id="btnSettings" data-i18n="header.settings">Settings</button>
+    <select id="languageSelect" aria-label="Language" data-i18n-attr="aria-label:language.label">
+      <option value="en" data-i18n-option="language.option.english">English</option>
+      <option value="de" data-i18n-option="language.option.german">Deutsch</option>
+    </select>
   </div>
 </header>
 
-<main class="wrap">
+<div id="systemNotice" class="system-notice info" role="status" aria-live="polite"></div>
+
+<main class="wrap" data-pane-board="true">
   <!-- Join screen -->
-  <section id="joinView" class="col">
-    <div class="card">
-      <h3>Join the world</h3>
-      <div class="stack">
-        <label>Name
-          <input id="name" placeholder="Hephaest" value="Hephaest" />
+  <section id="joinView" class="col join-layout">
+    <div class="card join-card">
+      <div class="join-card-header">
+        <div class="join-emblem" aria-hidden="true"></div>
+        <div>
+          <span class="join-eyebrow" data-i18n="join.eyebrow">Session Zero</span>
+          <h3 data-i18n="join.title">Forge your legend</h3>
+          <p class="join-subtitle" data-i18n="join.subtitle">Sketch a name and origin so the game master can welcome your hero into the story.</p>
+        </div>
+      </div>
+      <div class="stack join-form">
+        <label class="join-label">
+          <span data-i18n="join.nameLabel">Character name</span>
+          <input id="name" placeholder="Hephaest" value="Hephaest" data-i18n-attr="placeholder:join.namePlaceholder" />
         </label>
-        <label>Short background (2–3 sentences)
-          <textarea id="background" rows="3" placeholder="Wizard">Wizard</textarea>
+        <label class="join-label">
+          <span data-i18n="join.backgroundLabel">Short background (2–3 sentences)</span>
+          <textarea id="background" rows="3" placeholder="Wizard" data-i18n-attr="placeholder:join.backgroundPlaceholder">Wizard</textarea>
         </label>
-        <button id="btnEnter">Enter World</button>
-        <p class="tip">If a scenario already exists, you will join next turn. All players will be notified.</p>
+        <ul class="join-highlights">
+          <li data-i18n="join.hintTone">Hints about tone or motivation help tailor the opening scene.</li>
+          <li data-i18n="join.hintConcise">Keep it concise so the GM can weave it into play quickly.</li>
+        </ul>
+        <button id="btnEnter" class="join-primary" data-i18n="join.enter">Enter World</button>
+        <p id="joinHint" class="tip join-hint" data-i18n="join.hintWaiting">You'll start right away if no adventure is running; otherwise you'll appear after the next turn resolves.</p>
+        <p id="joinStatus" class="tip join-status" style="display:none"></p>
       </div>
     </div>
   </section>
 
   <!-- Game screen -->
-  <section id="gameView" class="col" style="display:none">
-    <div class="card">
-      <div class="row">
-        <div>
-          <div class="muted">World style</div>
-          <div id="worldStyle"></div>
-        </div>
-        <div style="margin-left:24px">
-          <div class="muted">Difficulty</div>
-          <div id="worldDiff"></div>
-        </div>
-        <div class="right muted">Turn <span id="turnIdx">0</span></div>
+  <section id="gameView" class="col" data-pane-group="main" style="display:none">
+    <div class="card" data-pane-id="scenario">
+      <div class="row scenario-header">
+        <h3 style="margin:0" data-i18n="game.scenario">Scenario</h3>
+        <button id="btnNarration" type="button" class="mini-toggle" aria-pressed="false" title="Toggle ElevenLabs narration" data-i18n="game.narrateOff">Narrate Off</button>
       </div>
-      <h3>Scenario</h3>
       <div id="scenario" class="muted">Waiting…</div>
     </div>
 
-    <div class="card">
-      <h3>Actions</h3>
+    <div class="card" data-pane-id="actions">
+      <h3 style="margin:0 0 8px 0" data-i18n="game.actions">Actions</h3>
       <div class="stack">
-        <textarea id="action" rows="3" placeholder="What do you attempt to do?"></textarea>
+        <textarea id="action" rows="3" placeholder="What do you attempt to do?" data-i18n-attr="placeholder:game.actionPlaceholder"></textarea>
         <div class="row">
-          <button id="btnSubmit">Submit</button>
-          <button id="btnNextTurn">Next turn</button>
-          <button id="btnCreateImage">Create Image</button>
+          <button id="btnSubmit" data-i18n="game.submit">Submit</button>
+          <button id="btnNextTurn" class="right" data-i18n="game.nextTurn">Next turn</button>
         </div>
         <div>
-          <h4 class="muted">This turn's submissions</h4>
+          <h4 class="muted" data-i18n="game.submissionsHeading">This turn's submissions</h4>
           <ul id="submissions" class="stack" style="margin:0; padding-left:18px"></ul>
         </div>
       </div>
@@ -101,111 +255,2124 @@
   </section>
 
   <!-- Sidebar -->
-  <aside id="side" class="col" style="display:none">
-    <div class="card">
-      <h3>Players</h3>
+  <aside id="side" class="col" data-pane-group="sidebar" style="display:none">
+    <div class="card" data-pane-id="scene">
+      <div class="row scenario-header scene-header">
+        <h3 style="margin:0" data-i18n="sidebar.sceneImage">Scene image</h3>
+        <button id="btnCreateImage" type="button" class="mini-toggle" aria-pressed="false" title="Enable automatic scene images" data-i18n="sidebar.autoImageOff">Auto Image Off</button>
+      </div>
+      <img id="scene" style="display:none" title="" />
+    </div>
+    <div class="card" data-pane-id="players">
+      <h3 style="margin:0 0 8px 0" data-i18n="sidebar.players">Players</h3>
       <ul id="players" style="list-style:none; padding:0; margin:0"></ul>
     </div>
-    <div class="card">
-      <h3>Your character</h3>
+    <div class="card" data-pane-id="character">
+      <h3 style="margin:0 0 8px 0" data-i18n="sidebar.yourCharacter">Your character</h3>
       <div id="you" class="stack">
-        <div><span class="muted">Name</span><div id="youName">—</div></div>
-        <div><span class="muted">Class</span><div id="youClass">—</div></div>
+        <div id="youFlags" class="player-tags"></div>
         <div class="grid2">
           <div>
-            <div class="muted">Abilities</div>
+            <div class="muted" data-i18n="sidebar.abilities">Abilities</div>
             <ul id="youAbilities" style="margin:0; padding-left:18px"></ul>
           </div>
           <div>
-            <div class="muted">Inventory</div>
+            <div class="muted" data-i18n="sidebar.inventory">Inventory</div>
             <ul id="youInv" style="margin:0; padding-left:18px"></ul>
           </div>
         </div>
         <div>
-          <div class="muted">Conditions</div>
+          <div class="muted" data-i18n="sidebar.conditions">Conditions</div>
           <ul id="youCond" style="margin:0; padding-left:18px"></ul>
         </div>
       </div>
-    </div>
-    <div class="card">
-      <h3>Scene image</h3>
-      <img id="scene" alt="No image yet" title="" />
-      <div class="tip">Hover the image to see the prompt.</div>
     </div>
   </aside>
 </main>
 
 <!-- Settings modal -->
 <div id="settingsBack" class="modalBack">
+  <div class="modal settings-modal">
+    <div class="settings-header">
+      <div>
+        <h3 data-i18n="settings.title">Session Settings</h3>
+      </div>
+      <button id="btnCloseSettings" class="icon-button" aria-label="Close settings" data-i18n-attr="aria-label:settings.close">&times;</button>
+    </div>
+    <div class="settings-body">
+      <section class="form-card">
+        <h4 data-i18n="settings.section.adventureTone">Adventure tone</h4>
+        <div class="grid2">
+          <label>
+            <span data-i18n="settings.worldStyle.label">World style</span>
+            <div class="world-style-picker">
+              <button type="button" id="worldStyleToggle" class="world-style-trigger" aria-haspopup="listbox" aria-expanded="false">High Fantasy</button>
+              <div id="worldStyleMenu" class="world-style-menu hidden" role="listbox" aria-labelledby="worldStyleToggle"></div>
+              <input id="setWorld" type="hidden" value="" />
+            </div>
+            <input id="setWorldCustom" class="world-custom-input hidden" type="text" autocomplete="off" data-i18n-attr="placeholder:settings.worldStyle.customPlaceholder" placeholder="Describe your world style" disabled />
+          </label>
+          <label>
+            <span data-i18n="settings.difficulty.label">Difficulty</span>
+            <select id="setDiff">
+              <option value="Trivial" data-i18n-option="settings.difficulty.option.trivial">Trivial</option>
+              <option value="Easy" data-i18n-option="settings.difficulty.option.easy">Easy</option>
+              <option value="Normal" selected data-i18n-option="settings.difficulty.option.normal">Normal</option>
+              <option value="Hard" data-i18n-option="settings.difficulty.option.hard">Hard</option>
+              <option value="Impossible" data-i18n-option="settings.difficulty.option.impossible">Impossible</option>
+            </select>
+          </label>
+        </div>
+      </section>
+      <section class="form-card">
+        <h4 data-i18n="settings.section.models">Models</h4>
+        <div class="grid2">
+          <label>
+            <span data-i18n="settings.textModel.label">Text model</span>
+            <select id="setTextModel"></select>
+          </label>
+          <label>
+            <span data-i18n="settings.thinking.label">Thinking mode</span>
+            <select id="setThinking">
+              <option value="none" selected data-i18n-option="settings.thinking.option.none">No thinking (fast)</option>
+              <option value="brief" data-i18n-option="settings.thinking.option.brief">Brief planning</option>
+              <option value="balanced" data-i18n-option="settings.thinking.option.balanced">Balanced</option>
+              <option value="deep" data-i18n-option="settings.thinking.option.deep">Deep reasoning</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="settings.imageModel.label">Image model</span>
+            <select id="setImageModel"></select>
+          </label>
+          <label>
+            <span data-i18n="settings.narrationModel.label">Narration model</span>
+            <select id="setNarrationModel"></select>
+          </label>
+        </div>
+      </section>
+      <section class="form-card">
+        <h4 data-i18n="settings.section.flow">Session flow &amp; performance</h4>
+        <label>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span data-i18n="settings.historyMode.summaryLabel">Send summary instead of full history</span>
+            <input id="setHistorySummary" type="checkbox" role="switch" data-i18n-attr="aria-label:settings.historyMode.summaryLabel" />
+          </div>
+          <span class="tip" data-i18n="settings.historyMode.summaryHint">When enabled, only a concise bullet summary is sent to the GM instead of full history.</span>
+        </label>
+        <label>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span data-i18n="settings.fxSaver.label">FX Saver (disable blur effects)</span>
+            <input id="setFxSaver" type="checkbox" role="switch" data-i18n-attr="aria-label:settings.fxSaver.label" />
+          </div>
+          <span class="tip" data-i18n="settings.fxSaver.hint">Reduce GPU-heavy visual effects on lower power devices.</span>
+        </label>
+      </section>
+      <section class="form-card">
+        <h4 data-i18n="settings.section.access">Access</h4>
+        <div class="grid2">
+          <label>
+            <span data-i18n="settings.geminiKey.label">Gemini API key</span>
+            <input id="setKey" type="text" placeholder="Paste your key…" data-i18n-attr="placeholder:settings.apiKeyPlaceholder" />
+          </label>
+          <label>
+            <span data-i18n="settings.grokKey.label">Grok API key</span>
+            <input id="setGrokKey" type="text" placeholder="Paste your key…" data-i18n-attr="placeholder:settings.apiKeyPlaceholder" />
+          </label>
+          <label>
+            <span data-i18n="settings.elevenKey.label">ElevenLabs API key</span>
+            <input id="setElevenKey" type="text" placeholder="Paste your key…" data-i18n-attr="placeholder:settings.apiKeyPlaceholder" />
+          </label>
+        </div>
+      </section>
+    </div>
+    <div class="settings-footer">
+      <div class="share-chip">
+        <span data-i18n="settings.share.label">Players join via</span>
+        <code id="shareUrl"></code>
+      </div>
+      <button id="btnSaveSettings" class="primary" data-i18n="settings.save">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Statistics modal -->
+<div id="statsBack" class="modalBack">
   <div class="modal">
-    <h3>Settings</h3>
-    <div class="stack">
-      <div class="grid2">
-        <label>World style
-          <select id="setWorld">
-            <option>High fantasy</option>
-            <option>Low fantasy</option>
-            <option>Science fantasy</option>
-            <option>Science fiction</option>
-            <option>Dieselpunk</option>
-            <option>Cyberpunk</option>
-            <option>Steampunk</option>
-            <option>Post-apocalyptic</option>
-            <option>Modern occult</option>
-          </select>
-        </label>
-        <label>Difficulty
-          <select id="setDiff">
-            <option>Trivial</option>
-            <option>Easy</option>
-            <option selected>Normal</option>
-            <option>Hard</option>
-            <option>Impossible</option>
-          </select>
-        </label>
+    <h3 data-i18n="stats.main.title">Usage overview</h3>
+    <div class="stats-summary">
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.shared.lastTurnCost">Last Turn Cost</span>
+        <span id="statsCostLast" class="stat-chip-value">—</span>
       </div>
-      <div class="grid2">
-        <label>Text model <span class="tip">(fetched live; no fallbacks)</span>
-          <select id="setTextModel"></select>
-        </label>
-        <label>Image model
-          <select id="setImageModel"></select>
-        </label>
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.shared.sessionCost">Session Cost</span>
+        <span id="statsCostSession" class="stat-chip-value">—</span>
       </div>
-      <label>Gemini API key
-        <input id="setKey" type="password" placeholder="Paste your key…" />
-        <div class="tip">Stored in plaintext in settings.json on the server (like a .env). Use a dedicated key.</div>
-      </label>
-      <div class="row">
-        <button id="btnSaveSettings">Save</button>
-        <button id="btnCloseSettings" class="right">Close</button>
+    </div>
+    <div class="stats-actions">
+      <button id="btnStatsText" data-i18n="stats.main.textDetails">Text details</button>
+      <button id="btnStatsImage" data-i18n="stats.main.imageDetails">Image details</button>
+      <button id="btnStatsNarration" data-i18n="stats.main.narrationDetails">Narration details</button>
+    </div>
+    <div class="tip" data-i18n="stats.main.tip">Open a category to see token and cost breakdowns.</div>
+    <div class="row" style="margin-top:12px">
+        <button id="btnCloseStats" class="right" data-i18n="stats.shared.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="statsTextBack" class="modalBack">
+  <div class="modal">
+    <h3 data-i18n="stats.text.title">Text usage details</h3>
+    <div class="stats-summary">
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.shared.lastTurnCost">Last Turn Cost</span>
+        <span id="statsTextCostLast" class="stat-chip-value">—</span>
       </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.shared.sessionCost">Session Cost</span>
+        <span id="statsTextCostSession" class="stat-chip-value">—</span>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.text.lastTokens">Last Turn Tokens (in / out / thinking)</span>
+        <span id="statsTextTokensLast" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.text.sessionTokens">Session Tokens (in / out / thinking)</span>
+        <span id="statsTextTokensSession" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.text.lastTotal">Last Turn Total Tokens</span>
+        <span id="statsTextTokensLastTotal" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.text.sessionTotal">Session Total Tokens</span>
+        <span id="statsTextTokensSessionTotal" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.text.throughput">Throughput</span>
+        <span id="statsTextRate" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.shared.sessionRequests">Session Requests</span>
+        <span id="statsTextRequests" class="stat-value">—</span>
+      </div>
+    </div>
+    <div class="tip" data-i18n="stats.text.tip">Token totals include thinking tokens when supported.</div>
+    <div class="row" style="margin-top:12px">
+        <button id="btnCloseStatsText" class="right" data-i18n="stats.shared.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="statsImageBack" class="modalBack">
+  <div class="modal">
+    <h3 data-i18n="stats.image.title">Image usage details</h3>
+    <div class="stats-summary">
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.image.turnCost">This Turn Image Cost</span>
+        <span id="statsImageCostLast" class="stat-chip-value">—</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.image.sessionCost">Session Image Cost</span>
+        <span id="statsImageCostSession" class="stat-chip-value">—</span>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.image.lastModel">Last Image Model</span>
+        <span id="statsImageModel" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.image.sessionCount">Session Images Generated</span>
+        <span id="statsImageCountSession" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.image.avgCost">Average Cost Per Image</span>
+        <span id="statsImageAvgCost" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.image.turnByType">This Turn Images by Type</span>
+        <span id="statsImageTurnCounts" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.image.sessionByType">Session Images by Type</span>
+        <span id="statsImageSessionCounts" class="stat-value">—</span>
+      </div>
+    </div>
+    <div class="tip" data-i18n="stats.image.tip">Image pricing uses Gemini per-image rates (standard tier).</div>
+    <div class="row" style="margin-top:12px">
+        <button id="btnCloseStatsImage" class="right" data-i18n="stats.shared.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="statsNarrationBack" class="modalBack">
+  <div class="modal">
+    <h3 data-i18n="stats.narration.title">Narration usage details</h3>
+    <div class="stats-summary">
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.shared.lastTurnCost">Last Turn Cost</span>
+        <span id="statsNarrationCostLast" class="stat-chip-value">—</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.shared.sessionCost">Session Cost</span>
+        <span id="statsNarrationCostSession" class="stat-chip-value">—</span>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.lastChars">Last Turn Characters</span>
+        <span id="statsNarrationCharsLast" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.lastCredits">Last Turn Credits</span>
+        <span id="statsNarrationCreditsLast" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.lastModel">Last Narration Model</span>
+        <span id="statsNarrationModel" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.sessionChars">Session Characters</span>
+        <span id="statsNarrationCharsSession" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.sessionCredits">Session Credits</span>
+        <span id="statsNarrationCreditsSession" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.voiceId">Voice ID</span>
+        <span id="statsNarrationVoice" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.shared.sessionRequests">Session Requests</span>
+        <span id="statsNarrationRequests" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.narration.remainingCredits">Remaining Credits</span>
+        <span id="statsNarrationCreditsRemaining" class="stat-value">—</span>
+      </div>
+    </div>
+    <div class="tip" data-i18n="stats.narration.tip">Cost estimates use ElevenLabs response headers when available; otherwise we fall back to text length and official pricing.</div>
+    <div class="row" style="margin-top:12px">
+        <button id="btnCloseStatsNarration" class="right" data-i18n="stats.shared.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="devInfoBack" class="modalBack">
+  <div class="modal dev-info-modal">
+    <h3 data-i18n="devInfo.title">Text API exchange</h3>
+    <div class="dev-info-grid">
+      <section class="dev-info-section">
+        <h4 data-i18n="devInfo.request">Last request</h4>
+        <pre id="devInfoRequest" class="dev-info-pre"></pre>
+      </section>
+      <section class="dev-info-section">
+        <h4 data-i18n="devInfo.response">Last response</h4>
+        <pre id="devInfoResponse" class="dev-info-pre"></pre>
+      </section>
+    </div>
+    <div class="tip" data-i18n="devInfo.tip">Shows the most recent payload sent to the text model and the raw response it returned.</div>
+    <div class="row" style="margin-top:12px">
+        <button id="btnCloseDevInfo" class="right" data-i18n="stats.shared.close">Close</button>
     </div>
   </div>
 </div>
 
 <script>
+  const FX_STORAGE_KEY = 'orpg-nofx';
+
+  function readFxPreference() {
+    try {
+      if (window.localStorage) {
+        const value = localStorage.getItem(FX_STORAGE_KEY);
+        if (value === '0') return false;
+        if (value === '1') return true;
+      }
+    } catch (err) {
+      /* ignore storage errors */
+    }
+    return true;
+  }
+
+  function persistFxPreference(enabled) {
+    try {
+      if (!window.localStorage) return;
+      localStorage.setItem(FX_STORAGE_KEY, enabled ? '1' : '0');
+    } catch (err) {
+      /* ignore storage errors */
+    }
+  }
+
+  const fxParam = new URLSearchParams(window.location.search).get('fx');
+  let initialFxSaver = readFxPreference();
+  if (fxParam === '0') {
+    initialFxSaver = true;
+    persistFxPreference(true);
+  } else if (fxParam === '1') {
+    initialFxSaver = false;
+    persistFxPreference(false);
+  }
+  if (initialFxSaver) {
+    document.documentElement.classList.add('nofx');
+  }
+
   const $ = (id) => document.getElementById(id);
-  const state = { playerId: null, lock: {active:false, reason:""} };
+  const state = {
+    playerId: null,
+    playerToken: null,
+    playerName: '',
+    playerBackground: '',
+    pendingJoin: null,
+    lock: {active:false, reason:""},
+    lastPublic: null,
+    autoTtsEnabled: false,
+    autoImageEnabled: false,
+    language: 'en',
+    currentTurn: 0,
+    joinStatusKey: null,
+    joinStatusArgs: null,
+    lastPrivate: null,
+    fxSaverEnabled: initialFxSaver,
+  };
+
+  function applyFxSaver(enabled, options = {}) {
+    if (enabled) {
+      document.documentElement.classList.add('nofx');
+    } else {
+      document.documentElement.classList.remove('nofx');
+    }
+    state.fxSaverEnabled = !!enabled;
+    if (options.persist) {
+      persistFxPreference(state.fxSaverEnabled);
+    }
+  }
+
+  let lastLanguageSync = null;
+
+  const narrationState = {
+    current: null,
+  };
+
+  const scenarioScrollState = {
+    lastTurnScrolled: null,
+  };
+
+  const MODAL_IDS = [
+    "settingsBack",
+    "statsBack",
+    "statsTextBack",
+    "statsImageBack",
+    "statsNarrationBack",
+    "devInfoBack",
+  ];
+
+  function isModalVisible(element) {
+    if (!element) return false;
+    const directDisplay = element.style.display;
+    if (directDisplay) {
+      return directDisplay !== "none";
+    }
+    return window.getComputedStyle(element).display !== "none";
+  }
+
+  function closeOpenModals() {
+    let closedAny = false;
+    for (const id of MODAL_IDS) {
+      const el = $(id);
+      if (isModalVisible(el)) {
+        el.style.display = "none";
+        closedAny = true;
+      }
+    }
+    return closedAny;
+  }
+
+  const DEFAULT_LANGUAGE = 'en';
+  const SUPPORTED_LANGUAGES = ['en', 'de'];
+  const LANGUAGE_STORAGE_KEY = 'orpg-language';
+  let DEFAULT_WORLD_STYLE = 'High Fantasy';
+  const DEFAULT_TEXT_MODEL = 'gemini-2.5-flash';
+  const CUSTOM_WORLD_VALUE = '__custom__';
+  const WORLD_STYLE_SOURCE_PATH = '/static/world-styles.json';
+  const WORLD_STYLE_APPLIES_HINTS = {
+    any: 'Layer on any world',
+  };
+  const WORLD_STYLE_CUSTOM_ENTRY = {
+    name: 'Custom…',
+    value: CUSTOM_WORLD_VALUE,
+    appliesTo: null,
+    depth: 0,
+    children: [],
+  };
+  function normalizeWorldStyleValue(value) {
+    if (typeof value !== 'string') return '';
+    return value.trim().toLowerCase();
+  }
+
+  function normalizeWorldStyleNode(node) {
+    if (node == null) return null;
+    if (typeof node === 'string') {
+      const trimmed = node.trim();
+      return trimmed ? { name: trimmed, applies_to: null, children: [] } : null;
+    }
+    if (typeof node !== 'object') return null;
+    const name = typeof node.name === 'string' ? node.name.trim() : '';
+    if (!name) return null;
+    const children = Array.isArray(node.children) ? node.children : [];
+    const appliesTo = typeof node.applies_to === 'string' ? node.applies_to.trim() : null;
+    return { name, children, applies_to: appliesTo };
+  }
+  const WORLD_STYLE_LOOKUP = new Map();
+  const WORLD_STYLE_PARENT_MAP = new Map();
+  let WORLD_STYLE_ENTRIES = [];
+  const WORLD_STYLE_FALLBACK_TREE = [
+    {
+      name: 'Fantasy',
+      children: [
+        { name: 'High Fantasy' },
+      ],
+    },
+  ];
+  function buildWorldStyleEntries(nodes, depth = 0, parentKey = null) {
+    if (!Array.isArray(nodes)) return [];
+    return nodes
+      .map((node) => {
+        const normalizedNode = normalizeWorldStyleNode(node);
+        if (!normalizedNode) return null;
+        const entry = {
+          name: normalizedNode.name,
+          value: normalizedNode.name,
+          appliesTo: normalizedNode.applies_to,
+          depth,
+          children: [],
+        };
+        const key = normalizeWorldStyleValue(entry.value);
+        if (key && !WORLD_STYLE_LOOKUP.has(key)) {
+          WORLD_STYLE_LOOKUP.set(key, entry);
+        }
+        if (key && parentKey) {
+          WORLD_STYLE_PARENT_MAP.set(key, parentKey);
+        }
+        if (Array.isArray(normalizedNode.children) && normalizedNode.children.length) {
+          entry.children = buildWorldStyleEntries(normalizedNode.children, depth + 1, key);
+        }
+        return entry;
+      })
+      .filter((entry) => entry && entry.value);
+  }
+  function findFirstLeafValue(entries) {
+    if (!Array.isArray(entries)) return null;
+    for (const entry of entries) {
+      if (!entry) continue;
+      if (Array.isArray(entry.children) && entry.children.length) {
+        const child = findFirstLeafValue(entry.children);
+        if (child) return child;
+      }
+      if (entry.value) return entry.value;
+    }
+    return null;
+  }
+  function applyWorldStyleTree(tree) {
+    WORLD_STYLE_LOOKUP.clear();
+    WORLD_STYLE_PARENT_MAP.clear();
+    WORLD_STYLE_ENTRIES = buildWorldStyleEntries(tree);
+    WORLD_STYLE_LOOKUP.set(normalizeWorldStyleValue(WORLD_STYLE_CUSTOM_ENTRY.value), WORLD_STYLE_CUSTOM_ENTRY);
+    if (!findWorldStyleEntry(DEFAULT_WORLD_STYLE)) {
+      const firstLeaf = findFirstLeafValue(WORLD_STYLE_ENTRIES);
+      if (firstLeaf) {
+        DEFAULT_WORLD_STYLE = firstLeaf;
+      }
+    }
+  }
+  async function loadWorldStyleData() {
+    try {
+      const resp = await fetch(WORLD_STYLE_SOURCE_PATH, { cache: 'no-cache' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const payload = await resp.json();
+      const tree = Array.isArray(payload?.world_styles) ? payload.world_styles : Array.isArray(payload) ? payload : null;
+      if (!Array.isArray(tree) || !tree.length) throw new Error('Invalid world style payload');
+      applyWorldStyleTree(tree);
+    } catch (err) {
+      console.warn('Failed to load world styles; using fallback', err);
+      applyWorldStyleTree(WORLD_STYLE_FALLBACK_TREE);
+    }
+  }
+  let worldStyleLoadPromise = null;
+  function ensureWorldStylesInitialized() {
+    if (WORLD_STYLE_ENTRIES.length) {
+      return Promise.resolve();
+    }
+    if (!worldStyleLoadPromise) {
+      worldStyleLoadPromise = loadWorldStyleData();
+    }
+    return worldStyleLoadPromise;
+  }
+  function findWorldStyleEntry(value) {
+    const key = normalizeWorldStyleValue(value);
+    return key ? WORLD_STYLE_LOOKUP.get(key) : undefined;
+  }
+  function worldStyleExists(value) {
+    if (normalizeWorldStyleValue(value) === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) return true;
+    return !!findWorldStyleEntry(value);
+  }
+  let worldStyleMenuInitialized = false;
+  const JOIN_DEFAULTS = {
+    en: { name: "Hephaest", background: "Wizard" },
+    de: { name: "Hephaest", background: "Zauberer" },
+  };
+  const KNOWN_JOIN_NAMES = new Set(Object.values(JOIN_DEFAULTS).map((entry) => entry.name));
+  const KNOWN_JOIN_BACKGROUNDS = new Set(Object.values(JOIN_DEFAULTS).map((entry) => entry.background));
+  const LANGUAGE_CODE_ALIASES = {
+    en: 'en',
+    eng: 'en',
+    english: 'en',
+    'american english': 'en',
+    'british english': 'en',
+    'us english': 'en',
+    'uk english': 'en',
+    'en-us': 'en',
+    'en-gb': 'en',
+    'en-au': 'en',
+    'en-ca': 'en',
+    'en-in': 'en',
+    'global english': 'en',
+    'general english': 'en',
+    de: 'de',
+    ger: 'de',
+    deu: 'de',
+    german: 'de',
+    deutsch: 'de',
+    'standard german': 'de',
+    'german standard': 'de',
+    'german (standard)': 'de',
+    'de-de': 'de',
+    'de-at': 'de',
+    'de-ch': 'de',
+  };
+  function normalizeLanguageCodeToken(value) {
+    if (value == null) return null;
+    let text = String(value).trim().toLowerCase();
+    if (!text) return null;
+    ['(', '/', '|'].forEach((sep) => {
+      if (text.includes(sep)) text = text.split(sep, 1)[0].trim();
+    });
+    text = text.replace(/_/g, '-');
+    const guesses = new Set();
+    guesses.add(text);
+    if (text.includes('-')) {
+      const head = text.split('-', 1)[0].trim();
+      if (head) guesses.add(head);
+      guesses.add(text.replace(/-/g, ''));
+    }
+    const spaced = text.replace(/-/g, ' ');
+    if (spaced) guesses.add(spaced);
+    for (const guess of guesses) {
+      if (!guess) continue;
+      const mapped = LANGUAGE_CODE_ALIASES[guess];
+      if (mapped) return mapped;
+      if (SUPPORTED_LANGUAGES.includes(guess)) return guess;
+    }
+    return null;
+  }
+
+  function modelSupportsLanguage(model, langCode) {
+    const normalizedLang = normalizeLanguageCodeToken(langCode);
+    if (!normalizedLang || normalizedLang === DEFAULT_LANGUAGE) return true;
+    const languageCodes = Array.isArray(model?.language_codes) ? model.language_codes : [];
+    for (const code of languageCodes) {
+      if (normalizeLanguageCodeToken(code) === normalizedLang) return true;
+    }
+    const rawLanguages = Array.isArray(model?.languages) ? model.languages : [];
+    for (const entry of rawLanguages) {
+      if (normalizeLanguageCodeToken(entry) === normalizedLang) return true;
+    }
+    return false;
+  }
+  const TRANSLATIONS = {
+    "alerts.createImageFailed": { en: "Create Image failed", de: "Bildgenerierung fehlgeschlagen" },
+    "alerts.createImageFailedDetail": { en: "Create Image failed: {{message}}", de: "Bildgenerierung fehlgeschlagen: {{message}}" },
+    "alerts.joinControl": { en: "Join the session to control narration.", de: "Tritt der Sitzung bei, um die Erzählung zu steuern." },
+    "alerts.joinControlImage": { en: "Join the session to control scene images.", de: "Tritt der Sitzung bei, um Szenenbilder zu steuern." },
+    "alerts.joinFailed": { en: "Join failed", de: "Beitritt fehlgeschlagen" },
+    "alerts.joinFailedDetail": { en: "Join failed: {{message}}", de: "Beitritt fehlgeschlagen: {{message}}" },
+    "alerts.modelsFetchFailed": { en: "Failed to fetch models. Ensure your Gemini or Grok and ElevenLabs API keys are saved in Settings.", de: "Modelle konnten nicht geladen werden. Stelle sicher, dass deine Gemini- oder Grok- sowie ElevenLabs-API-Schlüssel in den Einstellungen gespeichert sind." },
+    "alerts.nextTurnFailed": { en: "Next turn failed", de: "Nächste Runde fehlgeschlagen" },
+    "alerts.nextTurnFailedDetail": { en: "Next turn failed: {{message}}", de: "Nächste Runde fehlgeschlagen: {{message}}" },
+    "alerts.portraitFailed": { en: "Portrait request failed", de: "Porträtanfrage fehlgeschlagen" },
+    "alerts.portraitFailedDetail": { en: "Portrait request failed: {{message}}", de: "Porträtanfrage fehlgeschlagen: {{message}}" },
+    "alerts.settingsSaveFailed": { en: "Failed to save settings.", de: "Einstellungen konnten nicht gespeichert werden." },
+    "alerts.submitFailed": { en: "Submit failed", de: "Übermittlung fehlgeschlagen" },
+    "alerts.submitFailedDetail": { en: "Submit failed: {{message}}", de: "Übermittlung fehlgeschlagen: {{message}}" },
+    "alerts.toggleNarrationFailed": { en: "Toggle narration failed", de: "Erzählung umschalten fehlgeschlagen" },
+    "alerts.toggleNarrationFailedDetail": { en: "Toggle narration failed: {{message}}", de: "Erzählung umschalten fehlgeschlagen: {{message}}" },
+    "alerts.toggleImageFailed": { en: "Toggle scene images failed", de: "Automatisches Szenenbild umschalten fehlgeschlagen" },
+    "alerts.toggleImageFailedDetail": { en: "Toggle scene images failed: {{message}}", de: "Automatisches Szenenbild umschalten fehlgeschlagen: {{message}}" },
+    "common.working": { en: "Working…", de: "Verarbeite …" },
+    "common.workingCountdown": { en: "Working… {{seconds}}s", de: "Verarbeite … {{seconds}}s" },
+    "game.ability.unnamed": { en: "Unnamed ability", de: "Unbenannte Fähigkeit" },
+    "game.actionPlaceholder": { en: "What do you attempt to do?", de: "Was versuchst du zu tun?" },
+    "game.actions": { en: "Actions", de: "Aktionen" },
+    "game.advanceCountdown": { en: "Advancing… {{seconds}}s", de: "Weiter … {{seconds}}s" },
+    "game.condition.unnamed": { en: "Unnamed condition", de: "Unbenannter Zustand" },
+    "game.dropZone": { en: "Drop here to create a new lane", de: "Hier ablegen, um eine neue Spalte zu erstellen" },
+    "game.enterCountdown": { en: "Entering… {{seconds}}s", de: "Betrete … {{seconds}}s" },
+    "game.inventory.unnamed": { en: "Unnamed item", de: "Unbenannter Gegenstand" },
+    "game.lock.banner.busy": { en: "Busy…", de: "Beschäftigt …" },
+    "game.lock.banner.generatingImage": { en: "Generating image…", de: "Bild wird erzeugt …" },
+    "game.lock.banner.generatingPortrait": { en: "Rendering portrait…", de: "Porträt wird gerendert …" },
+    "game.lock.banner.resolving": { en: "Resolving turn…", de: "Runde wird ausgewertet …" },
+    "game.lock.reason.busy": { en: "Disabled while the GM is busy.", de: "Deaktiviert, während der SL beschäftigt ist." },
+    "game.lock.reason.generatingImage": { en: "Disabled while image generation is in progress.", de: "Deaktiviert, während ein Bild erzeugt wird." },
+    "game.lock.reason.generatingPortrait": { en: "Disabled while a portrait is rendering.", de: "Deaktiviert, während ein Porträt gerendert wird." },
+    "game.lock.reason.resolving": { en: "Disabled while the turn is being resolved.", de: "Deaktiviert, während die Runde ausgewertet wird." },
+    "game.narrateOff": { en: "Narrate Off", de: "Erzählung aus" },
+    "game.narrateOn": { en: "Narrate On", de: "Erzählung an" },
+    "game.narration.blocked": { en: "Narration playback was blocked by the browser.", de: "Die Wiedergabe der Erzählung wurde vom Browser blockiert." },
+    "game.narration.disableTitle": { en: "Disable ElevenLabs narration", de: "ElevenLabs-Erzählung deaktivieren" },
+    "game.narration.enableTitle": { en: "Enable ElevenLabs narration", de: "ElevenLabs-Erzählung aktivieren" },
+    "game.narration.error": { en: "ElevenLabs narration failed.", de: "ElevenLabs-Erzählung fehlgeschlagen." },
+    "game.nextTurn": { en: "Next turn", de: "Nächste Runde" },
+    "game.noAbility": { en: "no notable abilities", de: "keine besonderen Fähigkeiten" },
+    "game.noCondition": { en: "no special conditions", de: "keine besonderen Zustände" },
+    "game.noInventory": { en: "no carried gear", de: "keine getragene Ausrüstung" },
+    "game.playerFallback": { en: "Player", de: "Spieler" },
+    "game.playerFlag.departing": { en: "departing after next turn", de: "verlässt nach der nächsten Runde" },
+    "game.playerFlag.queued": { en: "queued to enter", de: "zum Beitritt vorgemerkt" },
+    "game.playerTag.departing": { en: "departing next turn", de: "verlässt in der nächsten Runde" },
+    "game.playerTag.joining": { en: "joining soon", de: "tritt bald bei" },
+    "game.portrait.previewAlt": { en: "Player portrait preview", de: "Spielerportrait-Vorschau" },
+    "game.portrait.previewWithPrompt": { en: "Portrait preview — {{prompt}}", de: "Porträtvorschau – {{prompt}}" },
+    "game.portrait.tooltip.generate": { en: "Click to generate your portrait.", de: "Klicke, um dein Porträt zu generieren." },
+    "game.portrait.tooltip.hover": { en: "Hover to preview this portrait.", de: "Fahre mit der Maus über dieses Porträt, um eine Vorschau zu sehen." },
+    "game.portrait.tooltip.lockedBusy": { en: "Portrait generation is paused while the GM is busy.", de: "Porträterstellung pausiert, während der SL beschäftigt ist." },
+    "game.portrait.tooltip.lockedPreJoin": { en: "Portraits unlock after you join the adventure.", de: "Porträts werden nach deinem Beitritt freigeschaltet." },
+    "game.portrait.tooltip.onlyOwner": { en: "Only this player can update their portrait.", de: "Nur dieser Spieler kann sein Porträt aktualisieren." },
+    "game.portrait.ariaLabel": { en: "{{name}} portrait", de: "Porträt von {{name}}" },
+    "game.portrait.tooltip.refresh": { en: "Click to refresh your portrait.", de: "Klicke, um dein Porträt zu aktualisieren." },
+    "game.scenario": { en: "Scenario", de: "Szenario" },
+    "game.submissionsHeading": { en: "This turn's submissions", de: "Beiträge dieser Runde" },
+    "game.submit": { en: "Submit", de: "Absenden" },
+    "game.turn": { en: "Turn {{count}}", de: "Runde {{count}}" },
+    "game.waiting": { en: "Waiting…", de: "Warten …" },
+    "devInfo.empty": { en: "No data recorded yet.", de: "Noch keine Daten vorhanden." },
+    "devInfo.fetchError": { en: "Failed to load developer info.", de: "Entwicklerinformationen konnten nicht geladen werden." },
+    "devInfo.request": { en: "Last request", de: "Letzte Anfrage" },
+    "devInfo.response": { en: "Last response", de: "Letzte Antwort" },
+    "devInfo.summaryRequestHeading": { en: "Summary request", de: "Zusammenfassungs-Anfrage" },
+    "devInfo.summaryResponseHeading": { en: "Summary response", de: "Zusammenfassungs-Antwort" },
+    "devInfo.scenarioRequestHeading": { en: "Scenario request", de: "Szenario-Anfrage" },
+    "devInfo.scenarioResponseHeading": { en: "Scenario response", de: "Szenario-Antwort" },
+    "devInfo.tip": { en: "Shows the most recent payload sent to the text model and everything it returned.", de: "Zeigt die zuletzt an das Textmodell gesendeten Daten sowie die komplette Antwort." },
+    "devInfo.title": { en: "Text API exchange", de: "Text-API-Austausch" },
+    "header.devInfo": { en: "Developer info", de: "Entwicklerinfo" },
+    "header.settings": { en: "Settings", de: "Einstellungen" },
+    "header.stats": { en: "Statistics", de: "Statistiken" },
+    "join.backgroundLabel": { en: "Short background (2–3 sentences)", de: "Kurzer Hintergrund (2–3 Sätze)" },
+    "join.backgroundPlaceholder": { en: "Wizard", de: "Zauberer" },
+    "join.countdown": { en: "Entering… {{seconds}}s", de: "Betrete … {{seconds}}s" },
+    "join.enter": { en: "Enter World", de: "Welt betreten" },
+    "join.eyebrow": { en: "Session Zero", de: "Session Null" },
+    "join.hintConcise": { en: "Keep it concise so the GM can weave it into play quickly.", de: "Halte dich kurz, damit der Spielleiter schnell loslegen kann." },
+    "join.hintTone": { en: "Hints about tone or motivation help tailor the opening scene.", de: "Hinweise zu Ton oder Motivation helfen, die Einstiegsszene anzupassen." },
+    "join.hintWaiting": { en: "You'll start right away if no adventure is running; otherwise you'll appear after the next turn resolves.", de: "Du startest sofort, wenn kein Abenteuer läuft; sonst erscheinst du nach der nächsten Runde." },
+    "join.nameLabel": { en: "Character name", de: "Charaktername" },
+    "join.namePlaceholder": { en: "Hephaest", de: "Hephaest" },
+    "join.status.creatingWorld": { en: "Creating your world. Hang tight while the opening scenario is prepared.", de: "Deine Welt wird erschaffen. Einen Moment Geduld, während die Einstiegsszene vorbereitet wird." },
+    "join.status.invalidSession": { en: "Your session is no longer valid. Please rejoin.", de: "Deine Sitzung ist nicht mehr gültig. Bitte tritt erneut bei." },
+    "join.status.preparing": { en: "Preparing your adventure. You'll enter as soon as the world is ready.", de: "Dein Abenteuer wird vorbereitet. Du startest, sobald die Welt bereit ist." },
+    "join.status.queueActive": { en: "You're queued to join. The GM will bring you in after the next turn.", de: "Du stehst in der Warteschlange. Der SL holt dich nach der nächsten Runde hinein." },
+    "join.status.queueAfterTurn": { en: "You're in the queue. Once the next turn resolves, your character will appear.", de: "Du bist in der Warteschlange. Sobald die nächste Runde abgeschlossen ist, erscheint dein Charakter." },
+    "join.status.requestSent": { en: "Request sent. You'll join after the next turn resolves.", de: "Anfrage gesendet. Du trittst nach der nächsten Runde bei." },
+    "join.status.restoring": { en: "Restoring session…", de: "Sitzung wird wiederhergestellt …" },
+    "join.status.waitingActive": { en: "An adventure is in progress. You'll enter after the next turn resolves.", de: "Ein Abenteuer läuft. Du kommst nach der nächsten Runde dazu." },
+    "join.status.waitingIdle": { en: "No adventure is running yet. The first player will start a new scenario immediately.", de: "Es läuft noch kein Abenteuer. Der erste Spieler startet sofort ein neues Szenario." },
+    "join.status.waitingQueued": { en: "You're queued to join. Waiting for the next turn to resolve…", de: "Du stehst in der Warteschlange. Wartest auf den Abschluss der nächsten Runde …" },
+    "join.subtitle": { en: "Sketch a name and origin so the game master can welcome your hero into the story.", de: "Skizziere einen Namen und eine Herkunft, damit der Spielleiter deinen Helden willkommen heißen kann." },
+    "join.title": { en: "Forge your legend", de: "Schmiede deine Legende" },
+    "language.label": { en: "Language", de: "Sprache" },
+    "language.option.english": { en: "English", de: "Englisch" },
+    "language.option.german": { en: "German", de: "Deutsch" },
+    "sidebar.players": { en: "Players", de: "Spieler" },
+    "sidebar.yourCharacter": { en: "Your character", de: "Dein Charakter" },
+    "sidebar.abilities": { en: "Abilities", de: "Fähigkeiten" },
+    "sidebar.inventory": { en: "Inventory", de: "Inventar" },
+    "sidebar.conditions": { en: "Conditions", de: "Zustände" },
+    "sidebar.sceneImage": { en: "Scene image", de: "Szenenbild" },
+    "sidebar.autoImageOff": { en: "Auto Image Off", de: "Auto-Bild aus" },
+    "sidebar.autoImageOn": { en: "Auto Image On", de: "Auto-Bild an" },
+    "sidebar.autoImage.enableTitle": { en: "Enable automatic scene images", de: "Automatische Szenenbilder aktivieren" },
+    "sidebar.autoImage.disableTitle": { en: "Disable automatic scene images", de: "Automatische Szenenbilder deaktivieren" },
+    "settings.apiKeyPlaceholder": { en: "Paste your key…", de: "Schlüssel einfügen …" },
+    "settings.close": { en: "Close settings", de: "Einstellungen schließen" },
+    "settings.difficulty.label": { en: "Difficulty", de: "Schwierigkeit" },
+    "settings.difficulty.option.easy": { en: "Easy", de: "Leicht" },
+    "settings.difficulty.option.hard": { en: "Hard", de: "Schwer" },
+    "settings.difficulty.option.impossible": { en: "Impossible", de: "Unmöglich" },
+    "settings.difficulty.option.normal": { en: "Normal", de: "Normal" },
+    "settings.difficulty.option.trivial": { en: "Trivial", de: "Trivial" },
+    "settings.elevenKey.label": { en: "ElevenLabs API key", de: "ElevenLabs-API-Schlüssel" },
+    "settings.geminiKey.label": { en: "Gemini API key", de: "Gemini-API-Schlüssel" },
+    "settings.grokKey.label": { en: "Grok API key", de: "Grok-API-Schlüssel" },
+    "settings.imageModel.label": { en: "Image model", de: "Bildmodell" },
+    "settings.narrationModel.disabledTitle": { en: "Save a valid ElevenLabs API key to load narration models.", de: "Speichere einen gültigen ElevenLabs-API-Schlüssel, um Erzählmodelle zu laden." },
+    "settings.narrationModel.enterKey": { en: "Enter ElevenLabs API key to load models", de: "Gib einen ElevenLabs-API-Schlüssel ein, um Modelle zu laden" },
+    "settings.narrationModel.label": { en: "Narration model", de: "Erzählmodell" },
+    "settings.narrationModel.savedSuffix": { en: "(saved)", de: "(gespeichert)" },
+    "settings.save": { en: "Save changes", de: "Änderungen speichern" },
+    "settings.section.access": { en: "Access", de: "Zugriff" },
+    "settings.section.adventureTone": { en: "Adventure tone", de: "Abenteuerstimmung" },
+    "settings.section.models": { en: "Models", de: "Modelle" },
+    "settings.section.flow": { en: "Session flow & performance", de: "Spielablauf & Performance" },
+    "settings.share.label": { en: "Players join via", de: "Spieler treten bei über" },
+    "settings.textModel.label": { en: "Text model", de: "Textmodell" },
+    "settings.thinking.label": { en: "Thinking mode", de: "Denkmodus" },
+    "settings.thinking.option.balanced": { en: "Balanced", de: "Ausgewogen" },
+    "settings.thinking.option.brief": { en: "Brief planning", de: "Kurze Planung" },
+    "settings.thinking.option.deep": { en: "Deep reasoning", de: "Tiefes Nachdenken" },
+    "settings.thinking.option.none": { en: "No thinking (fast)", de: "Kein Nachdenken (schnell)" },
+    "settings.historyMode.summaryLabel": { en: "Send summary instead of full history", de: "Nur Zusammenfassung senden" },
+    "settings.historyMode.summaryHint": {
+      en: "When enabled, the GM receives a concise bullet summary in place of the full history each turn.",
+      de: "Wenn aktiviert, erhält der Spielleiter pro Runde nur eine knappe Stichpunkt-Zusammenfassung statt des vollständigen Verlaufs."
+    },
+    "settings.fxSaver.label": {
+      en: "FX Saver (disable blur effects)",
+      de: "FX-Sparer (Weichzeichner deaktivieren)"
+    },
+    "settings.fxSaver.hint": {
+      en: "Turn off blur and translucency to improve performance on weaker GPUs.",
+      de: "Deaktiviert Unschärfe und Transparenz für bessere Leistung auf schwächeren GPUs."
+    },
+    "settings.title": { en: "Session Settings", de: "Sitzungseinstellungen" },
+    "settings.worldStyle.label": { en: "World style", de: "Weltstil" },
+    "settings.worldStyle.option.highFantasy": { en: "High fantasy", de: "High Fantasy" },
+    "settings.worldStyle.option.lowFantasy": { en: "Low fantasy", de: "Low Fantasy" },
+    "settings.worldStyle.option.scienceFantasy": { en: "Science fantasy", de: "Science-Fantasy" },
+    "settings.worldStyle.option.scienceFiction": { en: "Science fiction", de: "Science-Fiction" },
+    "settings.worldStyle.option.unicorns": { en: "Unicorns", de: "Einhörner" },
+    "settings.worldStyle.option.cuteDogs": { en: "Cute dogs", de: "Süße Hunde" },
+    "settings.worldStyle.option.fairyGarden": { en: "Fairy garden", de: "Feengarten" },
+    "settings.worldStyle.option.custom": { en: "Custom…", de: "Benutzerdefiniert…" },
+    "settings.worldStyle.customPlaceholder": { en: "Describe your world style", de: "Beschreibe deinen Weltstil" },
+    "stats.image.avgCost": { en: "Average Cost Per Image", de: "Durchschnittliche Kosten pro Bild" },
+    "stats.image.avgPrefix": { en: "avg", de: "Ø" },
+    "stats.image.lastModel": { en: "Last Image Model", de: "Zuletzt genutztes Bildmodell" },
+    "stats.image.sessionByType": { en: "Session Images by Type", de: "Bilder der Sitzung nach Typ" },
+    "stats.image.sessionCost": { en: "Session Image Cost", de: "Bildkosten der Sitzung" },
+    "stats.image.sessionCount": { en: "Session Images Generated", de: "In der Sitzung erstellte Bilder" },
+    "stats.image.tip": { en: "Image pricing uses Gemini per-image rates (standard tier).", de: "Bildpreise basieren auf den Gemini-Kosten pro Bild (Standardtarif)." },
+    "stats.image.type.portrait": { en: "portrait", de: "Porträt" },
+    "stats.image.type.scene": { en: "scene", de: "Szene" },
+    "stats.image.title": { en: "Image usage details", de: "Bildnutzung im Detail" },
+    "stats.image.turnByType": { en: "This Turn Images by Type", de: "Bilder dieser Runde nach Typ" },
+    "stats.image.turnCost": { en: "This Turn Image Cost", de: "Bildkosten dieser Runde" },
+    "stats.main.imageDetails": { en: "Image details", de: "Bilddetails" },
+    "stats.main.narrationDetails": { en: "Narration details", de: "Erzähldetails" },
+    "stats.main.textDetails": { en: "Text details", de: "Textdetails" },
+    "stats.main.tip": { en: "Open a category to see token and cost breakdowns.", de: "Öffne eine Kategorie, um Token- und Kostenaufteilungen zu sehen." },
+    "stats.main.title": { en: "Usage overview", de: "Nutzungsübersicht" },
+    "stats.narration.lastChars": { en: "Last Turn Characters", de: "Zeichen letzte Runde" },
+    "stats.narration.lastCredits": { en: "Last Turn Credits", de: "Credits letzte Runde" },
+    "stats.narration.lastModel": { en: "Last Narration Model", de: "Zuletzt genutztes Erzählmodell" },
+    "stats.narration.remainingCredits": { en: "Remaining Credits", de: "Verbleibende Credits" },
+    "stats.narration.sessionChars": { en: "Session Characters", de: "Zeichen in der Sitzung" },
+    "stats.narration.sessionCredits": { en: "Session Credits", de: "Credits der Sitzung" },
+    "stats.narration.tip": { en: "Cost estimates use ElevenLabs response headers when available; otherwise we fall back to text length and official pricing.", de: "Kostenschätzungen verwenden, wenn verfügbar, die ElevenLabs-Antwortheader; andernfalls greifen wir auf Textlänge und offizielle Preise zurück." },
+    "stats.narration.title": { en: "Narration usage details", de: "Erzählung im Detail" },
+    "stats.narration.voiceId": { en: "Voice ID", de: "Stimmen-ID" },
+    "stats.shared.close": { en: "Close", de: "Schließen" },
+    "stats.shared.lastTurnCost": { en: "Last Turn Cost", de: "Kosten letzte Runde" },
+    "stats.shared.sessionCost": { en: "Session Cost", de: "Kosten der Sitzung" },
+    "stats.shared.sessionRequests": { en: "Session Requests", de: "Anfragen der Sitzung" },
+    "stats.text.lastTokens": { en: "Last Turn Tokens (in / out / thinking)", de: "Tokens letzte Runde (rein / raus / Denken)" },
+    "stats.text.lastTotal": { en: "Last Turn Total Tokens", de: "Token gesamt letzte Runde" },
+    "stats.text.sessionTokens": { en: "Session Tokens (in / out / thinking)", de: "Tokens der Sitzung (rein / raus / Denken)" },
+    "stats.text.sessionTotal": { en: "Session Total Tokens", de: "Token gesamt in der Sitzung" },
+    "stats.text.throughput": { en: "Throughput", de: "Durchsatz" },
+    "stats.text.rateUnit": { en: "tok/s", de: "Token/s" },
+    "stats.text.tip": { en: "Token totals include thinking tokens when supported.", de: "Gesamttoken beinhalten Denk-Token, wenn verfügbar." },
+    "stats.text.title": { en: "Text usage details", de: "Textnutzung im Detail" },
+    "system.unexpectedError": { en: "An unexpected error occurred.", de: "Ein unerwarteter Fehler ist aufgetreten." },
+  };
+
+
+  function activeLanguage() {
+    const lang = typeof state.language === 'string' ? state.language : DEFAULT_LANGUAGE;
+    return SUPPORTED_LANGUAGES.includes(lang) ? lang : DEFAULT_LANGUAGE;
+  }
+
+  function formatTemplate(template, replacements) {
+    if (!replacements || typeof replacements !== 'object') return template;
+    return template.replace(/\{\{(\w+)\}\}/g, (match, token) => {
+      if (!Object.prototype.hasOwnProperty.call(replacements, token)) return match;
+      const value = replacements[token];
+      return value === undefined || value === null ? '' : String(value);
+    });
+  }
+
+  function t(key, replacements) {
+    if (typeof key !== 'string' || !key) return '';
+    const entry = TRANSLATIONS[key];
+    const lang = activeLanguage();
+    const template = entry ? (entry[lang] ?? entry.en ?? key) : key;
+    return formatTemplate(template, replacements);
+  }
+
+  function loadStoredLanguage() {
+    try {
+      if (window.localStorage) {
+        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        if (stored && SUPPORTED_LANGUAGES.includes(stored)) {
+          return stored;
+        }
+      }
+    } catch (err) {
+      /* ignore storage errors */
+    }
+    const docLang = (document.documentElement.getAttribute('lang') || '').toLowerCase();
+    if (SUPPORTED_LANGUAGES.includes(docLang)) return docLang;
+    return DEFAULT_LANGUAGE;
+  }
+
+  async function syncLanguageToServer(lang) {
+    const normalized = SUPPORTED_LANGUAGES.includes(lang) ? lang : DEFAULT_LANGUAGE;
+    if (lastLanguageSync === normalized) return;
+    const body = { language: normalized };
+    if (state.playerId && state.playerToken) {
+      body.player_id = state.playerId;
+      body.token = state.playerToken;
+    }
+    try {
+      const resp = await fetch('/api/language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const detail = await resp.text();
+        throw new Error(detail || `HTTP ${resp.status}`);
+      }
+      lastLanguageSync = normalized;
+    } catch (err) {
+      console.warn('Failed to sync language with server', err);
+    }
+  }
+
+  function setLanguage(lang, { persist = true, apply = true, notify = false } = {}) {
+    const normalized = SUPPORTED_LANGUAGES.includes(lang) ? lang : DEFAULT_LANGUAGE;
+    const changed = normalized !== state.language;
+    state.language = normalized;
+    if (persist) {
+      try {
+        if (window.localStorage) localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+      } catch (err) {
+        /* ignore storage errors */
+      }
+    }
+    if (apply) {
+      applyLanguage();
+    }
+    if (notify && (changed || lastLanguageSync !== normalized)) {
+      syncLanguageToServer(normalized);
+    }
+  }
+
+  function maybeUpdateJoinDefaults(lang) {
+    const defaults = JOIN_DEFAULTS[lang] || JOIN_DEFAULTS[DEFAULT_LANGUAGE];
+    const nameInput = $('name');
+    const backgroundInput = $('background');
+    let changed = false;
+    if (nameInput && defaults && defaults.name) {
+      const current = (nameInput.value || '').trim();
+      if (!current || KNOWN_JOIN_NAMES.has(current)) {
+        if (nameInput.value !== defaults.name) {
+          nameInput.value = defaults.name;
+          changed = true;
+        }
+      }
+    }
+    if (backgroundInput && defaults && defaults.background) {
+      const currentBg = (backgroundInput.value || '').trim();
+      if (!currentBg || KNOWN_JOIN_BACKGROUNDS.has(currentBg)) {
+        if (backgroundInput.value !== defaults.background) {
+          backgroundInput.value = defaults.background;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      rememberJoinInputs(nameInput ? nameInput.value : '', backgroundInput ? backgroundInput.value : '');
+    }
+  }
+
+  function refreshPortraitTooltips() {
+    const lockActive = Boolean(state.lock && state.lock.active);
+    document.querySelectorAll('.player-portrait').forEach((btn) => {
+      updatePortraitButtonState(btn, lockActive);
+    });
+  }
+
+  function updateTurnHeader(value) {
+    const turnHeaderEl = $('turnHeader');
+    if (!turnHeaderEl) return;
+    const numeric = Number.isFinite(value) ? value : 0;
+    turnHeaderEl.textContent = t('game.turn', { count: numeric });
+    state.currentTurn = numeric;
+  }
+
+  function applyLanguage() {
+    const lang = typeof state.language === 'string' ? state.language : DEFAULT_LANGUAGE;
+    state.language = SUPPORTED_LANGUAGES.includes(lang) ? lang : DEFAULT_LANGUAGE;
+    document.documentElement.setAttribute('lang', state.language);
+    document.documentElement.setAttribute('dir', 'ltr');
+    const selector = $('languageSelect');
+    if (selector && selector.value !== state.language) {
+      selector.value = state.language;
+    }
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      const key = el.dataset.i18n;
+      if (!key) return;
+      const text = t(key);
+      if (typeof text === 'string') {
+        el.textContent = text;
+        if (el.tagName === 'BUTTON') {
+          el.dataset.defaultLabel = text;
+        }
+      }
+    });
+    document.querySelectorAll('[data-i18n-attr]').forEach((el) => {
+      const attrSpec = el.dataset.i18nAttr;
+      if (!attrSpec) return;
+      attrSpec.split(',').forEach((segment) => {
+        const parts = segment.split(':');
+        if (parts.length < 2) return;
+        const attr = parts[0].trim();
+        const key = parts.slice(1).join(':').trim();
+        if (!attr || !key) return;
+        const text = t(key);
+        if (typeof text === 'string') {
+          el.setAttribute(attr, text);
+          if (attr === 'placeholder') {
+            el.dataset.defaultLabel = text;
+          }
+        }
+      });
+    });
+    document.querySelectorAll('[data-i18n-option]').forEach((opt) => {
+      const key = opt.dataset.i18nOption;
+      if (!key) return;
+      const text = t(key);
+      if (typeof text === 'string') {
+        opt.textContent = text;
+      }
+    });
+    if (worldStyleMenuInitialized) {
+      const menu = $('worldStyleMenu');
+      const currentSelect = $('setWorld');
+      if (menu && currentSelect) {
+        const currentValue = currentSelect.value;
+        closeWorldStyleMenu({ silentFocus: true });
+        renderWorldStyleMenu(menu);
+        updateWorldMenuSelection(currentValue);
+        updateWorldPickerDisplay(currentValue);
+      }
+    }
+    maybeUpdateJoinDefaults(state.language);
+    buttonCountdowns.forEach((entry, id) => {
+      const btn = $(id);
+      if (btn) {
+        entry.defaultLabel = (btn.textContent || '').trim();
+        buttonCountdowns.set(id, entry);
+      }
+    });
+    if (state.joinStatusKey) {
+      updateJoinStatus('', { key: state.joinStatusKey, args: state.joinStatusArgs || {} });
+    }
+    const scenarioEl = $('scenario');
+    if (scenarioEl && !scenarioEl.dataset.historyReady) {
+      const trimmed = (scenarioEl.textContent || '').trim();
+      const waitingEn = TRANSLATIONS['game.waiting'] ? TRANSLATIONS['game.waiting'].en : 'Waiting…';
+      const waitingDe = TRANSLATIONS['game.waiting'] ? TRANSLATIONS['game.waiting'].de : 'Warten …';
+      if (!trimmed || trimmed === waitingEn || trimmed === waitingDe) {
+        scenarioEl.textContent = t('game.waiting');
+      }
+    }
+    if (state.lastPublic) {
+      renderPublic(state.lastPublic);
+    } else {
+      refreshJoinGuidance();
+      syncNarrationToggle(state.autoTtsEnabled);
+      setLockBanner(state.lock || { active: false, reason: '' });
+      updateTurnHeader(state.currentTurn);
+      refreshPortraitTooltips();
+    }
+    if (state.lastPrivate) {
+      renderPrivate(state.lastPrivate);
+    }
+  }
+
+  function initLanguage() {
+    const stored = loadStoredLanguage();
+    setLanguage(stored, { persist: false, apply: true });
+  }
+
+  let systemNoticeTimer = null;
+  const buttonCountdowns = new Map();
+
+  initLanguage();
+
+  function startButtonCountdown(id, renderLabel) {
+    const btn = $(id);
+    if (!btn) return;
+    const entry = buttonCountdowns.get(id) || {};
+    if (!entry.defaultLabel) {
+      const raw = (btn.textContent || '').trim();
+      entry.defaultLabel = raw || btn.dataset.defaultLabel || t('common.working');
+    }
+    entry.start = Date.now();
+    entry.active = true;
+    entry.render = typeof renderLabel === 'function'
+      ? renderLabel
+      : (seconds) => t('common.workingCountdown', { seconds });
+
+    const updateLabel = () => {
+      if (!entry.active) return;
+      const now = Date.now();
+      const base = typeof entry.start === 'number' ? entry.start : now;
+      const elapsed = now - base;
+      const seconds = Math.max(1, Math.floor(elapsed / 1000) + 1);
+      const text = entry.render(seconds);
+      if (typeof text === 'string') {
+        btn.textContent = text;
+      }
+    };
+
+    if (entry.timer) {
+      clearInterval(entry.timer);
+    }
+    updateLabel();
+    entry.timer = setInterval(updateLabel, 1000);
+    buttonCountdowns.set(id, entry);
+  }
+
+  function stopButtonCountdown(id) {
+    const entry = buttonCountdowns.get(id);
+    if (!entry) return;
+    entry.active = false;
+    if (entry.timer) {
+      clearInterval(entry.timer);
+      entry.timer = null;
+    }
+    const btn = $(id);
+    if (btn && entry.defaultLabel) {
+      btn.textContent = entry.defaultLabel;
+    }
+    buttonCountdowns.set(id, entry);
+  }
+
+  function showSystemNotice(message, kind = 'info') {
+    const fallback = t('system.unexpectedError');
+    const normalized = (typeof message === 'string' ? message.trim() : '') || fallback;
+    const el = $("systemNotice");
+    if (!el) {
+      if (kind === 'error') alert(normalized);
+      return;
+    }
+    el.dataset.kind = kind;
+    el.className = `system-notice ${kind}`;
+    el.textContent = normalized;
+    el.style.display = 'block';
+    if (kind === 'error') {
+      el.setAttribute('role', 'alert');
+      el.setAttribute('aria-live', 'assertive');
+    } else {
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+    }
+    if (systemNoticeTimer) {
+      clearTimeout(systemNoticeTimer);
+    }
+    systemNoticeTimer = setTimeout(() => {
+      hideSystemNotice();
+    }, 8000);
+  }
+
+  function hideSystemNotice(kind) {
+    const el = $("systemNotice");
+    if (!el) return;
+    if (kind && el.dataset && el.dataset.kind && el.dataset.kind !== kind) return;
+    el.style.display = 'none';
+    el.textContent = '';
+    if (el.dataset) delete el.dataset.kind;
+    el.className = 'system-notice info';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    if (systemNoticeTimer) {
+      clearTimeout(systemNoticeTimer);
+      systemNoticeTimer = null;
+    }
+  }
+
+  function getScenarioBlock(turnNumber, createIfMissing = false) {
+    const scenarioEl = $("scenario");
+    if (!scenarioEl) return null;
+    const key = typeof turnNumber === 'number' && Number.isFinite(turnNumber) ? turnNumber : 0;
+    let block = scenarioEl.querySelector(`[data-turn="${key}"]`);
+    if (!block && createIfMissing) {
+      if (!scenarioEl.dataset.historyReady) {
+        scenarioEl.textContent = '';
+        scenarioEl.classList.remove('muted');
+        scenarioEl.dataset.historyReady = '1';
+      }
+      block = document.createElement('div');
+      block.className = 'scenario-block';
+      block.dataset.turn = String(key);
+      scenarioEl.appendChild(block);
+    }
+    return block;
+  }
+
+  function scenarioIsPinnedToBottom(el, threshold = 24) {
+    if (!el) return false;
+    if (el.scrollHeight <= el.clientHeight) return true;
+    const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
+    return distance <= threshold;
+  }
+
+  function scrollScenarioToBottom() {
+    const scenarioEl = $("scenario");
+    if (!scenarioEl) return;
+    requestAnimationFrame(() => {
+      scenarioEl.scrollTop = scenarioEl.scrollHeight;
+    });
+  }
+
+  function syncNarrationToggle(enabled) {
+    state.autoTtsEnabled = Boolean(enabled);
+    const btn = $("btnNarration");
+    if (!btn) return;
+    const active = Boolean(enabled);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.classList.toggle("active", active);
+    btn.textContent = active ? t('game.narrateOn') : t('game.narrateOff');
+    btn.title = active ? t('game.narration.disableTitle') : t('game.narration.enableTitle');
+    btn.disabled = !state.playerId;
+    if (!active && narrationState.current) {
+      try { narrationState.current.pause(); } catch (err) { /* ignore */ }
+      narrationState.current.src = '';
+      narrationState.current = null;
+    }
+    if (!active) {
+      hideSystemNotice('error');
+    }
+  }
+
+  function syncSceneImageToggle(enabled) {
+    state.autoImageEnabled = Boolean(enabled);
+    const btn = $("btnCreateImage");
+    if (!btn) return;
+    const active = Boolean(enabled);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.classList.toggle("active", active);
+    btn.textContent = active ? t('sidebar.autoImageOn') : t('sidebar.autoImageOff');
+    btn.title = active ? t('sidebar.autoImage.disableTitle') : t('sidebar.autoImage.enableTitle');
+    const busy = Boolean(state.lock && state.lock.active);
+    btn.disabled = !state.playerId || busy;
+  }
+
+  function scenarioIsActive() {
+    const pub = state.lastPublic;
+    if (!pub) return false;
+    const scenarioText = typeof pub.current_scenario === 'string' ? pub.current_scenario.trim() : '';
+    if (scenarioText) return true;
+    return typeof pub.turn_index === 'number' && pub.turn_index > 0;
+  }
+
+  function refreshJoinGuidance() {
+    const hint = $("joinHint");
+    if (!hint) return;
+    if (scenarioIsActive()) {
+      hint.textContent = t('join.status.waitingActive');
+    } else {
+      hint.textContent = t('join.status.waitingIdle');
+    }
+  }
+  const PLAYER_STORAGE_KEY = 'orpg-player-session';
+
+  function getStoredPlayer() {
+    try {
+      const raw = window.localStorage ? localStorage.getItem(PLAYER_STORAGE_KEY) : null;
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function setStoredPlayer(data) {
+    if (!window.localStorage) return;
+    try {
+      if (!data) localStorage.removeItem(PLAYER_STORAGE_KEY);
+      else localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(data));
+    } catch (err) {
+      /* ignore storage errors */
+    }
+  }
+
+  function rememberJoinInputs(name, background, reset = false) {
+    const normalized = {
+      name: name || '',
+      background: background || ''
+    };
+    if (reset) {
+      setStoredPlayer(normalized);
+      return;
+    }
+    const existing = getStoredPlayer();
+    if (!existing) {
+      setStoredPlayer(normalized);
+      return;
+    }
+    setStoredPlayer({
+      ...existing,
+      ...normalized,
+    });
+  }
+
+  function persistPlayerSession(details) {
+    if (!details || !details.id || !details.token) return;
+    const existing = getStoredPlayer() || {};
+    const next = {
+      ...existing,
+      id: details.id,
+      token: details.token,
+      name: details.name || existing.name || '',
+      background: details.background || existing.background || '',
+    };
+    if (typeof details.pending === 'boolean') {
+      next.pending = details.pending;
+    }
+    setStoredPlayer(next);
+  }
+
+  function applyStoredJoinInputs(info) {
+    if (!info) return;
+    if (typeof info.name === 'string' && $("name")) $("name").value = info.name;
+    if (typeof info.background === 'string' && $("background")) $("background").value = info.background;
+  }
+
+  function updateJoinStatus(text, options = {}) {
+    const el = $("joinStatus");
+    if (!el) return;
+    const key = options.key;
+    const args = options.args;
+    const hasKey = Boolean(key);
+    const message = hasKey ? t(key, args) : text;
+    if (!message) {
+      el.textContent = "";
+      el.style.display = "none";
+      state.joinStatusKey = null;
+      state.joinStatusArgs = null;
+      return;
+    }
+    el.textContent = message;
+    el.style.display = "";
+    state.joinStatusKey = hasKey ? key : null;
+    state.joinStatusArgs = hasKey ? (args || {}) : null;
+  }
+
+  function setJoinWaiting(waiting) {
+    const btn = $("btnEnter");
+    const nameInput = $("name");
+    const backgroundInput = $("background");
+    [btn, nameInput, backgroundInput].forEach((el) => {
+      if (!el) return;
+      if (waiting) el.setAttribute("disabled", "true");
+      else el.removeAttribute("disabled");
+    });
+    if (!waiting) {
+      stopButtonCountdown('btnEnter');
+    }
+  }
+
+  function handleJoinState(pending) {
+    if (!state.playerId || !state.playerToken) return;
+    state.pendingJoin = pending;
+    if (pending) {
+      if (scenarioIsActive()) {
+        updateJoinStatus('', { key: 'join.status.queueActive' });
+      } else {
+        updateJoinStatus('', { key: 'join.status.preparing' });
+      }
+      showJoinView();
+      setJoinWaiting(true);
+    } else {
+      updateJoinStatus('');
+      setJoinWaiting(false);
+      showGameView();
+    }
+    refreshJoinGuidance();
+    persistPlayerSession({
+      id: state.playerId,
+      token: state.playerToken,
+      name: state.playerName,
+      background: state.playerBackground,
+      pending,
+    });
+  }
+
+  function showGameView() {
+    if ($("joinView")) $("joinView").style.display = "none";
+    if ($("gameView")) $("gameView").style.display = "";
+    if ($("side")) $("side").style.display = "";
+  }
+
+  function showJoinView() {
+    if ($("joinView")) $("joinView").style.display = "";
+    if ($("gameView")) $("gameView").style.display = "none";
+    if ($("side")) $("side").style.display = "none";
+  }
+
+  function populateList(listEl, items, renderItem, emptyMessage) {
+    if (!listEl) return;
+    listEl.innerHTML = "";
+    const entries = Array.isArray(items) ? items : [];
+    if (!entries.length) {
+      const empty = document.createElement("li");
+      empty.className = "list-note";
+      empty.textContent = emptyMessage;
+      listEl.appendChild(empty);
+      return;
+    }
+    entries.forEach((entry) => {
+      const li = document.createElement("li");
+      renderItem(li, entry);
+      listEl.appendChild(li);
+    });
+  }
+
+  function renderAbilityList(listEl, abilities) {
+    populateList(
+      listEl,
+      abilities,
+      (li, ability) => {
+        const baseName = ability && ability.n ? ability.n : t('game.ability.unnamed');
+        const detail = ability && ability.x ? ` (${ability.x})` : '';
+        li.textContent = `${baseName}${detail}`;
+      },
+      t('game.noAbility')
+    );
+  }
+
+  function renderInventoryList(listEl, items) {
+    populateList(
+      listEl,
+      items,
+      (li, item) => {
+        li.textContent = item || t('game.inventory.unnamed');
+      },
+      t('game.noInventory')
+    );
+  }
+
+  function renderConditionList(listEl, conditions) {
+    populateList(
+      listEl,
+      conditions,
+      (li, condition) => {
+        li.textContent = condition || t('game.condition.unnamed');
+      },
+      t('game.noCondition')
+    );
+  }
+
+  function clearPrivatePanels() {
+    const youFlags = $("youFlags");
+    const youAbilities = $("youAbilities");
+    const youInv = $("youInv");
+    const youCond = $("youCond");
+    if (youFlags) {
+      youFlags.innerHTML = "";
+      youFlags.style.display = "none";
+    }
+    renderAbilityList(youAbilities, []);
+    renderInventoryList(youInv, []);
+    renderConditionList(youCond, []);
+    state.lastPrivate = null;
+  }
+
+  function expireSession(message, options = {}) {
+    const stored = getStoredPlayer();
+    const fallbackName = stored && typeof stored.name === 'string' ? stored.name : ($("name") ? $("name").value : '');
+    const fallbackBackground = stored && typeof stored.background === 'string' ? stored.background : ($("background") ? $("background").value : '');
+    rememberJoinInputs(fallbackName, fallbackBackground, true);
+    applyStoredJoinInputs({ name: fallbackName, background: fallbackBackground });
+    state.playerId = null;
+    state.playerToken = null;
+    state.playerName = fallbackName || '';
+    state.playerBackground = fallbackBackground || '';
+    state.pendingJoin = null;
+    syncNarrationToggle(state.autoTtsEnabled);
+    showJoinView();
+    clearPrivatePanels();
+    if (ws && ws.readyState <= WebSocket.OPEN) {
+      try { ws.close(); } catch (err) { /* ignore */ }
+    }
+    setJoinWaiting(false);
+    const key = options.key;
+    const args = options.args;
+    if (key) {
+      updateJoinStatus('', { key, args });
+      alert(t(key, args));
+    } else if (message) {
+      updateJoinStatus(message);
+      alert(message);
+    } else {
+      updateJoinStatus('');
+    }
+  }
+
+  function isAuthFailure(status) {
+    return status === 403 || status === 404;
+  }
+
+  async function handleActionError(resp, contextKey) {
+    if (isAuthFailure(resp.status)) {
+      expireSession('', { key: 'join.status.invalidSession' });
+      return;
+    }
+    let detail = '';
+    try {
+      detail = await resp.text();
+    } catch (err) {
+      detail = '';
+    }
+    const base = (typeof contextKey === 'string' && TRANSLATIONS[contextKey]) ? t(contextKey) : (contextKey || '');
+    const suffix = detail ? `: ${detail}` : '';
+    alert(`${base}${suffix}`);
+  }
+
+  let portraitPreviewEl = null;
+  let portraitPreviewImg = null;
+  let portraitPreviewFrame = null;
+  const portraitPreviewState = {
+    clientX: null,
+    clientY: null,
+    fallbackEl: null,
+  };
+
+  function ensurePortraitPreview() {
+    if (!portraitPreviewEl) {
+      portraitPreviewEl = document.createElement("div");
+      portraitPreviewEl.className = "portrait-preview";
+      portraitPreviewImg = document.createElement("img");
+      portraitPreviewImg.alt = t('game.portrait.previewAlt');
+      portraitPreviewEl.appendChild(portraitPreviewImg);
+      document.body.appendChild(portraitPreviewEl);
+    }
+    return portraitPreviewEl;
+  }
+
+  function hidePortraitPreview() {
+    if (portraitPreviewFrame !== null) {
+      cancelAnimationFrame(portraitPreviewFrame);
+      portraitPreviewFrame = null;
+    }
+    if (portraitPreviewEl) {
+      portraitPreviewEl.style.display = "none";
+    }
+  }
+
+  function updatePortraitPreviewPosition(evt, fallbackEl) {
+    if (evt && typeof evt.clientX === "number" && typeof evt.clientY === "number") {
+      portraitPreviewState.clientX = evt.clientX;
+      portraitPreviewState.clientY = evt.clientY;
+    } else {
+      portraitPreviewState.clientX = null;
+      portraitPreviewState.clientY = null;
+    }
+    if (fallbackEl) {
+      portraitPreviewState.fallbackEl = fallbackEl;
+    }
+    if (!portraitPreviewEl || portraitPreviewEl.style.display === "none") {
+      return;
+    }
+    if (portraitPreviewFrame === null) {
+      portraitPreviewFrame = requestAnimationFrame(flushPortraitPreviewPosition);
+    }
+  }
+
+  function flushPortraitPreviewPosition() {
+    portraitPreviewFrame = null;
+    if (!portraitPreviewEl || portraitPreviewEl.style.display === "none") {
+      return;
+    }
+    const padding = 16;
+    const offset = 18;
+    let clientX = portraitPreviewState.clientX;
+    let clientY = portraitPreviewState.clientY;
+    const fallbackEl = portraitPreviewState.fallbackEl;
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+      if (fallbackEl) {
+        const rect = fallbackEl.getBoundingClientRect();
+        clientX = rect.right;
+        clientY = rect.top + rect.height / 2;
+      } else {
+        clientX = window.innerWidth / 2;
+        clientY = window.innerHeight / 2;
+      }
+    }
+    const box = portraitPreviewEl.getBoundingClientRect();
+    let left = clientX + offset;
+    let top = clientY + offset;
+    const maxLeft = window.innerWidth - box.width - padding;
+    const maxTop = window.innerHeight - box.height - padding;
+    if (left > maxLeft) {
+      left = Math.max(padding, clientX - box.width - offset);
+    }
+    if (top > maxTop) {
+      top = Math.max(padding, clientY - box.height - offset);
+    }
+    portraitPreviewEl.style.left = `${Math.max(padding, left)}px`;
+    portraitPreviewEl.style.top = `${Math.max(padding, top)}px`;
+  }
+
+  function showPortraitPreview(src, prompt, evt, fallbackEl) {
+    if (!src) return;
+    const el = ensurePortraitPreview();
+    if (!portraitPreviewImg) return;
+    portraitPreviewImg.src = src;
+    const altText = prompt ? t('game.portrait.previewWithPrompt', { prompt }) : t('game.portrait.previewAlt');
+    portraitPreviewImg.alt = altText;
+    el.style.display = "block";
+    updatePortraitPreviewPosition(evt, fallbackEl);
+  }
+
+  function updatePortraitButtonState(btn, lockActive) {
+    if (!btn) return;
+    const owned = btn.dataset.owned === "true";
+    const pending = btn.dataset.pending === "true";
+    const hasImage = btn.dataset.hasImage === "true";
+    const canClick = Boolean(owned && state.playerToken && !pending && !lockActive);
+    btn.dataset.clickable = canClick ? "true" : "false";
+    if (canClick) {
+      btn.onclick = () => requestPortrait(btn);
+    } else {
+      btn.onclick = null;
+    }
+    if (owned) {
+      if (lockActive && !pending) {
+        btn.title = t('game.portrait.tooltip.lockedBusy');
+      } else if (pending) {
+        btn.title = t('game.portrait.tooltip.lockedPreJoin');
+      } else if (hasImage) {
+        btn.title = t('game.portrait.tooltip.refresh');
+      } else {
+        btn.title = t('game.portrait.tooltip.generate');
+      }
+    } else if (hasImage) {
+      btn.title = t('game.portrait.tooltip.hover');
+    } else {
+      btn.title = t('game.portrait.tooltip.onlyOwner');
+    }
+  }
 
   // UI helpers
   function setLockBanner(lock) {
     const banner = $("lockBanner");
     const buttons = [$("btnSubmit"), $("btnNextTurn"), $("btnCreateImage"), $("btnEnter")].filter(Boolean);
+    const portraitButtons = Array.from(document.querySelectorAll(".player-portrait"));
     state.lock = lock || {active:false, reason:""};
-    if (lock.active) {
-      const why = lock.reason === "resolving_turn" ? "Resolving turn…" : (lock.reason === "generating_image" ? "Generating image…" : "Busy…");
-      banner.textContent = why;
-      buttons.forEach(b => {
-        b.setAttribute("disabled", "true");
-        b.title = (lock.reason === "resolving_turn")
-          ? "Disabled while the turn is being resolved."
-          : "Disabled while image generation is in progress.";
-      });
-    } else {
-      banner.textContent = "";
-      buttons.forEach(b => { b.removeAttribute("disabled"); b.title=""; });
+    const active = Boolean(state.lock.active);
+    if (banner) {
+      if (active) {
+        let why = t('game.lock.banner.busy');
+        if (state.lock.reason === "resolving_turn") why = t('game.lock.banner.resolving');
+        else if (state.lock.reason === "generating_image") why = t('game.lock.banner.generatingImage');
+        else if (state.lock.reason === "generating_portrait") why = t('game.lock.banner.generatingPortrait');
+        banner.textContent = why;
+      } else {
+        banner.textContent = "";
+      }
     }
+    const titleMap = {
+      resolving_turn: t('game.lock.reason.resolving'),
+      generating_image: t('game.lock.reason.generatingImage'),
+      generating_portrait: t('game.lock.reason.generatingPortrait'),
+    };
+    const disableTitle = titleMap[state.lock.reason] || t('game.lock.reason.busy');
+    buttons.forEach((b) => {
+      if (!b) return;
+      if (active) {
+        b.setAttribute('disabled', 'true');
+        b.title = disableTitle;
+      } else if (b.id === "btnEnter" && state.pendingJoin) {
+        b.setAttribute('disabled', 'true');
+        b.title = t('join.status.requestSent');
+      } else {
+        b.removeAttribute('disabled');
+        b.title = "";
+      }
+    });
+    if (active) {
+      hidePortraitPreview();
+    }
+    portraitButtons.forEach((btn) => updatePortraitButtonState(btn, active));
+  }
+
+  function toggleCustomWorldInput(isCustom, options = {}) {
+    const input = $("setWorldCustom");
+    if (!input) return;
+    const shouldShow = Boolean(isCustom);
+    if (shouldShow) {
+      input.classList.remove('hidden');
+      input.removeAttribute('disabled');
+      if (options.focus) {
+        input.focus();
+        input.select();
+      }
+    } else {
+      input.classList.add('hidden');
+      input.setAttribute('disabled', 'true');
+    }
+  }
+
+  function escapeCssValue(value) {
+    const text = typeof value === 'string' ? value : '';
+    if (window.CSS && typeof window.CSS.escape === 'function') {
+      return CSS.escape(text);
+    }
+    return text.replace(/["\\]/g, '\\$&');
+  }
+
+  function createWorldStyleButton(entry, depth) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const depthClass = `level-${Math.min(Math.max(depth, 0), 3)}`;
+    button.className = `world-style-option ${depthClass}`.trim();
+    const value = entry && typeof entry.value === 'string' ? entry.value : '';
+    const normalizedValue = normalizeWorldStyleValue(value);
+    button.dataset.value = value;
+    button.dataset.nodeKey = normalizedValue;
+    button.setAttribute('role', 'option');
+    if (Array.isArray(entry?.children) && entry.children.length) {
+      button.dataset.hasChildren = 'true';
+      button.setAttribute('aria-haspopup', 'true');
+      button.setAttribute('aria-expanded', 'false');
+    }
+    const labelSpan = document.createElement('span');
+    if (normalizedValue === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
+      const customLabel = t('settings.worldStyle.option.custom') || (entry && typeof entry.name === 'string' ? entry.name : value);
+      labelSpan.textContent = customLabel;
+    } else {
+      labelSpan.textContent = entry && typeof entry.name === 'string' ? entry.name : value;
+    }
+    button.appendChild(labelSpan);
+    if (entry && entry.appliesTo && WORLD_STYLE_APPLIES_HINTS[entry.appliesTo]) {
+      const hintSpan = document.createElement('span');
+      hintSpan.className = 'world-style-hint';
+      hintSpan.textContent = WORLD_STYLE_APPLIES_HINTS[entry.appliesTo];
+      button.appendChild(hintSpan);
+    }
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const isCustom = normalizedValue === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE);
+      selectWorldStyle(value, { fromMenu: true, focusCustom: isCustom });
+      closeWorldStyleMenu({ silentFocus: isCustom });
+    });
+    return button;
+  }
+
+  function createWorldStyleNode(entry, depth = 0) {
+    const hasChildren = Array.isArray(entry?.children) && entry.children.length;
+    const normalizedKey = normalizeWorldStyleValue(entry && entry.value ? entry.value : '');
+    if (!hasChildren) {
+      return createWorldStyleButton(entry, depth);
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'world-style-group';
+
+    const header = document.createElement('div');
+    header.className = `world-style-group-header level-${Math.min(Math.max(depth, 0), 3)}`;
+
+    const expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'world-style-expander';
+    expander.dataset.nodeKey = normalizedKey;
+    expander.setAttribute('aria-label', `Toggle ${entry?.name || entry?.value || 'category'}`);
+    expander.setAttribute('aria-expanded', 'false');
+    expander.textContent = '▸';
+
+    const optionButton = createWorldStyleButton(entry, depth);
+    optionButton.classList.add('world-style-group-button');
+
+    expander.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const expanded = expander.getAttribute('aria-expanded') === 'true';
+      setWorldStyleGroupExpandedByKey(normalizedKey, !expanded);
+    });
+
+    header.appendChild(expander);
+    header.appendChild(optionButton);
+
+    const childContainer = document.createElement('div');
+    childContainer.className = 'world-style-children hidden';
+    childContainer.dataset.parentKey = normalizedKey;
+    childContainer.setAttribute('role', 'group');
+
+    entry.children.forEach((child) => {
+      childContainer.appendChild(createWorldStyleNode(child, depth + 1));
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(childContainer);
+    return wrapper;
+  }
+
+  function renderWorldStyleMenu(menu) {
+    if (!menu) return;
+    menu.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+    WORLD_STYLE_ENTRIES.forEach((entry) => {
+      fragment.appendChild(createWorldStyleNode(entry, 0));
+    });
+    fragment.appendChild(createWorldStyleNode(WORLD_STYLE_CUSTOM_ENTRY, 0));
+    menu.appendChild(fragment);
+  }
+
+  function setWorldStyleGroupExpandedByKey(key, expanded) {
+    if (!key) return;
+    const menu = $('worldStyleMenu');
+    if (!menu) return;
+    const escaped = escapeCssValue(key);
+    const container = menu.querySelector(`.world-style-children[data-parent-key="${escaped}"]`);
+    const expander = menu.querySelector(`.world-style-expander[data-node-key="${escaped}"]`);
+    const labelButton = menu.querySelector(`.world-style-option[data-node-key="${escaped}"]`);
+    if (container) {
+      container.classList.toggle('hidden', !expanded);
+    }
+    if (expander) {
+      expander.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      expander.textContent = expanded ? '▾' : '▸';
+    }
+    if (labelButton) {
+      labelButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      if (expanded) {
+        labelButton.dataset.expanded = 'true';
+      } else {
+        labelButton.removeAttribute('data-expanded');
+      }
+    }
+  }
+
+  function isWorldStyleGroupExpanded(key) {
+    if (!key) return false;
+    const menu = $('worldStyleMenu');
+    if (!menu) return false;
+    const escaped = escapeCssValue(key);
+    const container = menu.querySelector(`.world-style-children[data-parent-key="${escaped}"]`);
+    return container ? !container.classList.contains('hidden') : false;
+  }
+
+  function expandWorldStyleAncestors(normalizedValue) {
+    if (!normalizedValue) return;
+    const visited = new Set();
+    let current = normalizedValue;
+    while (WORLD_STYLE_PARENT_MAP.has(current)) {
+      const parentKey = WORLD_STYLE_PARENT_MAP.get(current);
+      if (!parentKey || visited.has(parentKey)) break;
+      setWorldStyleGroupExpandedByKey(parentKey, true);
+      visited.add(parentKey);
+      current = parentKey;
+    }
+  }
+
+  function isWorldStyleElementHidden(element, root) {
+    if (!element) return true;
+    let node = element;
+    while (node && node !== root) {
+      if (node.classList && node.classList.contains('hidden')) {
+        return true;
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  function getVisibleWorldStyleButtons(menu) {
+    if (!menu) return [];
+    const options = Array.from(menu.querySelectorAll('.world-style-option'));
+    return options.filter((option) => !isWorldStyleElementHidden(option, menu));
+  }
+
+  function focusWorldStyleParent(button) {
+    const menu = $('worldStyleMenu');
+    if (!menu || !button || !button.dataset) return false;
+    const key = button.dataset.nodeKey;
+    const parentKey = key ? WORLD_STYLE_PARENT_MAP.get(key) : null;
+    if (!parentKey) return false;
+    const parentButton = menu.querySelector(`.world-style-option[data-node-key="${escapeCssValue(parentKey)}"]`);
+    if (parentButton) {
+      parentButton.focus();
+      return true;
+    }
+    return false;
+  }
+
+  function focusFirstChildOfGroup(key) {
+    const menu = $('worldStyleMenu');
+    if (!menu || !key) return false;
+    const escaped = escapeCssValue(key);
+    const container = menu.querySelector(`.world-style-children[data-parent-key="${escaped}"]`);
+    if (!container) return false;
+    const childOption = Array.from(container.querySelectorAll('.world-style-option')).find((btn) => !isWorldStyleElementHidden(btn, menu));
+    if (childOption) {
+      childOption.focus();
+      return true;
+    }
+    return false;
+  }
+
+  function updateWorldMenuSelection(value) {
+    const menu = $('worldStyleMenu');
+    if (!menu) return;
+    const normalized = normalizeWorldStyleValue(value);
+    expandWorldStyleAncestors(normalized);
+    const options = menu.querySelectorAll('.world-style-option');
+    options.forEach((option) => {
+      const optionValue = option && option.dataset ? option.dataset.value || '' : '';
+      const isMatch = normalizeWorldStyleValue(optionValue) === normalized;
+      if (isMatch) {
+        option.dataset.selected = 'true';
+        option.setAttribute('aria-selected', 'true');
+        if (option.dataset && option.dataset.hasChildren === 'true') {
+          setWorldStyleGroupExpandedByKey(option.dataset.nodeKey, true);
+        }
+        if (typeof option.scrollIntoView === 'function' && !menu.classList.contains('hidden')) {
+          option.scrollIntoView({ block: 'nearest' });
+        }
+      } else {
+        option.removeAttribute('data-selected');
+        option.setAttribute('aria-selected', 'false');
+      }
+    });
+  }
+
+  function currentWorldStyleLabel(value) {
+    const normalized = normalizeWorldStyleValue(value);
+    if (normalized === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
+      const customLabel = t('settings.worldStyle.option.custom') || 'Custom…';
+      const customInput = $('setWorldCustom');
+      const customValue = customInput ? customInput.value.trim() : '';
+      return customValue ? `${customLabel}: ${customValue}` : customLabel;
+    }
+    const entry = findWorldStyleEntry(value) || findWorldStyleEntry(DEFAULT_WORLD_STYLE) || WORLD_STYLE_ENTRIES[0] || null;
+    if (entry && typeof entry.name === 'string' && entry.name) {
+      return entry.name;
+    }
+    return value || DEFAULT_WORLD_STYLE;
+  }
+
+  function updateWorldPickerDisplay(value) {
+    const toggle = $('worldStyleToggle');
+    if (!toggle) return;
+    const label = currentWorldStyleLabel(value);
+    toggle.textContent = label;
+    toggle.setAttribute('data-current-value', value || '');
+    const entry = findWorldStyleEntry(value);
+    if (entry && entry.appliesTo && WORLD_STYLE_APPLIES_HINTS[entry.appliesTo]) {
+      toggle.title = `${label} - ${WORLD_STYLE_APPLIES_HINTS[entry.appliesTo]}`;
+    } else {
+      toggle.title = label;
+    }
+  }
+
+  function selectWorldStyle(value, options = {}) {
+    const input = $('setWorld');
+    if (!input) return '';
+    const normalized = normalizeWorldStyleValue(value);
+    let finalValue = value;
+    if (normalized === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
+      finalValue = CUSTOM_WORLD_VALUE;
+    } else {
+      const entry = findWorldStyleEntry(value);
+      if (entry) {
+        finalValue = entry.value;
+      } else {
+        finalValue = '';
+      }
+    }
+    if (!finalValue) {
+      const fallbackEntry = findWorldStyleEntry(DEFAULT_WORLD_STYLE) || WORLD_STYLE_ENTRIES[0] || WORLD_STYLE_CUSTOM_ENTRY;
+      finalValue = fallbackEntry ? fallbackEntry.value : DEFAULT_WORLD_STYLE;
+    }
+    const previous = input.value;
+    input.value = finalValue;
+    const isCustom = normalizeWorldStyleValue(finalValue) === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE);
+    toggleCustomWorldInput(isCustom, { focus: !!options.focusCustom });
+    updateWorldPickerDisplay(finalValue);
+    updateWorldMenuSelection(finalValue);
+    if (!options.silent && previous !== finalValue) {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return finalValue;
+  }
+
+  function closeWorldStyleMenu(options = {}) {
+    const menu = $('worldStyleMenu');
+    const toggle = $('worldStyleToggle');
+    if (!menu || !toggle) return;
+    if (menu.classList.contains('hidden')) return;
+    menu.classList.add('hidden');
+    toggle.setAttribute('aria-expanded', 'false');
+    if (!options.silentFocus) {
+      toggle.focus({ preventScroll: true });
+    }
+  }
+
+  function openWorldStyleMenu() {
+    const menu = $('worldStyleMenu');
+    const toggle = $('worldStyleToggle');
+    const input = $('setWorld');
+    if (!menu || !toggle) return;
+    menu.classList.remove('hidden');
+    toggle.setAttribute('aria-expanded', 'true');
+    const currentValue = input ? input.value : DEFAULT_WORLD_STYLE;
+    updateWorldMenuSelection(currentValue);
+    const visibleOptions = getVisibleWorldStyleButtons(menu);
+    let target = visibleOptions.find((option) => option.dataset && option.dataset.selected === 'true');
+    if (!target) {
+      target = visibleOptions[0];
+    }
+    if (target) {
+      target.focus({ preventScroll: false });
+    }
+  }
+
+  function handleWorldStyleOutsideEvent(event) {
+    const menu = $('worldStyleMenu');
+    const toggle = $('worldStyleToggle');
+    if (!menu || menu.classList.contains('hidden')) return;
+    const target = event?.target;
+    if (toggle && target && toggle.contains(target)) return;
+    if (menu && target && menu.contains(target)) return;
+    closeWorldStyleMenu({ silentFocus: true });
+  }
+
+  function handleWorldStyleMenuKeydown(event) {
+    const menu = $('worldStyleMenu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    const options = getVisibleWorldStyleButtons(menu);
+    if (!options.length) return;
+    let active = document.activeElement;
+    if (active && active.classList.contains('world-style-expander')) {
+      const key = active.dataset ? active.dataset.nodeKey : null;
+      const labelButton = key ? menu.querySelector(`.world-style-option[data-node-key="${escapeCssValue(key)}"]`) : null;
+      if (labelButton) {
+        labelButton.focus();
+        active = labelButton;
+      }
+    }
+    if (!active || !active.classList || !active.classList.contains('world-style-option')) {
+      active = options[0];
+      if (active) active.focus();
+    }
+    const currentIndex = options.indexOf(active);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeWorldStyleMenu();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = options[Math.min((currentIndex >= 0 ? currentIndex + 1 : 0), options.length - 1)] || options[options.length - 1];
+      if (next) next.focus();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const prev = options[Math.max((currentIndex >= 0 ? currentIndex - 1 : options.length - 1), 0)] || options[0];
+      if (prev) prev.focus();
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      options[0]?.focus();
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      options[options.length - 1]?.focus();
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      if (active && active.dataset && active.dataset.hasChildren === 'true') {
+        const key = active.dataset.nodeKey;
+        if (!isWorldStyleGroupExpanded(key)) {
+          event.preventDefault();
+          setWorldStyleGroupExpandedByKey(key, true);
+        } else if (focusFirstChildOfGroup(key)) {
+          event.preventDefault();
+        }
+      }
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      if (active && active.dataset) {
+        const key = active.dataset.nodeKey;
+        if (active.dataset.hasChildren === 'true' && isWorldStyleGroupExpanded(key)) {
+          event.preventDefault();
+          setWorldStyleGroupExpandedByKey(key, false);
+          return;
+        }
+        if (focusWorldStyleParent(active)) {
+          event.preventDefault();
+          return;
+        }
+      }
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (active && active.classList.contains('world-style-option')) {
+        event.preventDefault();
+        active.click();
+      }
+      return;
+    }
+    if (event.key === 'Tab') {
+      closeWorldStyleMenu({ silentFocus: true });
+    }
+  }
+
+  async function initializeWorldStylePicker() {
+    if (worldStyleMenuInitialized) return;
+    const toggle = $('worldStyleToggle');
+    const menu = $('worldStyleMenu');
+    const input = $('setWorld');
+    if (!toggle || !menu || !input) return;
+    await ensureWorldStylesInitialized();
+    worldStyleMenuInitialized = true;
+    renderWorldStyleMenu(menu);
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      if (expanded) {
+        closeWorldStyleMenu();
+      } else {
+        openWorldStyleMenu();
+      }
+    });
+    menu.addEventListener('keydown', handleWorldStyleMenuKeydown);
+    document.addEventListener('mousedown', handleWorldStyleOutsideEvent);
+    document.addEventListener('focusin', handleWorldStyleOutsideEvent);
+    const initial = input.value || DEFAULT_WORLD_STYLE;
+    selectWorldStyle(initial, { silent: true });
   }
 
   function pillClass(word) {
@@ -218,30 +2385,105 @@
 
   // Populate settings modal
   async function openSettings() {
+    await ensureWorldStylesInitialized();
     const s = await (await fetch("/api/settings")).json();
-    $("setWorld").value = s.world_style || "High fantasy";
-    $("setDiff").value = s.difficulty || "Normal";
-    // Fetch models first, then set selection
-    try {
-      const models = await (await fetch("/api/models")).json();
-      const textSel = $("setTextModel");
-      textSel.innerHTML = "";
-      (models.models || []).forEach(m => {
-        // Offer only generateContent-capable models for text
-        const supported = (m.supported || []).map(x => (""+x).toLowerCase());
-        if (supported.includes("generatecontent") || supported.includes("generateContent")) {
-          const opt = document.createElement("option");
-          opt.value = m.name.replace(/^models\//,"");
-          opt.textContent = `${m.displayName || m.name}`;
-          textSel.appendChild(opt);
+    const worldSelect = $("setWorld");
+    const customWorldInput = $("setWorldCustom");
+    if (worldSelect) {
+      const rawWorldStyle = typeof s.world_style === 'string' ? s.world_style.trim() : '';
+      const normalizedRaw = normalizeWorldStyleValue(rawWorldStyle);
+      if (normalizedRaw === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
+        if (customWorldInput) {
+          customWorldInput.value = '';
         }
-      });
-      if (s.text_model) textSel.value = s.text_model;
+        selectWorldStyle(CUSTOM_WORLD_VALUE, { silent: true });
+      } else if (rawWorldStyle && !worldStyleExists(rawWorldStyle)) {
+        if (customWorldInput) {
+          customWorldInput.value = rawWorldStyle;
+        }
+        selectWorldStyle(CUSTOM_WORLD_VALUE, { silent: true });
+      } else {
+        if (customWorldInput) {
+          customWorldInput.value = '';
+        }
+        const valueToApply = rawWorldStyle || DEFAULT_WORLD_STYLE;
+        selectWorldStyle(valueToApply, { silent: true });
+      }
+    }
+    $("setDiff").value = s.difficulty || "Normal";
+    $("setThinking").value = (s.thinking_mode || "none");
+    const historyToggle = $("setHistorySummary");
+    if (historyToggle) {
+      historyToggle.checked = String(s.history_mode || 'full').toLowerCase() === 'summary';
+    }
+    const fxSaverToggle = $("setFxSaver");
+    if (fxSaverToggle) {
+      fxSaverToggle.checked = !!state.fxSaverEnabled;
+    }
+    // Fetch models first, then set selection
+    const textSel = $("setTextModel");
+    const imgSel = $("setImageModel");
+    const narrationSel = $("setNarrationModel");
+    try {
+      const resp = await fetch("/api/models");
+      if (!resp.ok) throw new Error("model list request failed");
+      const models = await resp.json();
+      const availableModels = models.models || [];
+      const narrationModels = Array.isArray(models.narration_models) ? models.narration_models : [];
 
-      const imgSel = $("setImageModel");
+      textSel.innerHTML = "";
+      const seenTextModels = new Set();
+      const textOptions = [];
+      availableModels.forEach(m => {
+        const provider = String(m.provider || 'gemini').toLowerCase();
+        const supported = Array.isArray(m.supported) ? m.supported.map(x => String(x).toLowerCase()) : [];
+        const supportsText = (
+          provider === 'grok'
+            ? supported.some(x => x.includes('chat'))
+            : supported.includes('generatecontent')
+        );
+        if (!supportsText) return;
+        let rawName = String(m.name || '').trim();
+        if (!rawName) return;
+        if (provider === 'gemini') {
+          rawName = rawName.replace(/^models\//, '');
+        }
+        if (!rawName) return;
+        if (seenTextModels.has(rawName)) return;
+        seenTextModels.add(rawName);
+        const label = String(m.displayName || m.name || rawName);
+        const suffix = provider === 'grok' ? ' · Grok' : provider === 'gemini' ? ' · Gemini' : '';
+        textOptions.push({
+          value: rawName,
+          provider,
+          display: `${label}${suffix}`,
+        });
+      });
+      textOptions.sort((a, b) => a.display.localeCompare(b.display, undefined, { sensitivity: 'base' }));
+      textOptions.forEach(entry => {
+        const opt = document.createElement('option');
+        opt.value = entry.value;
+        opt.dataset.provider = entry.provider;
+        opt.textContent = entry.display;
+        textSel.appendChild(opt);
+      });
+      const desiredTextModel = (s.text_model || DEFAULT_TEXT_MODEL || '').trim();
+      if (desiredTextModel) {
+        const optionAvailable = [...textSel.options].some((opt) => opt.value === desiredTextModel);
+        if (optionAvailable) {
+          textSel.value = desiredTextModel;
+        } else if (textSel.options.length) {
+          textSel.selectedIndex = 0;
+        }
+      } else if (textSel.options.length) {
+        textSel.selectedIndex = 0;
+      }
+
       imgSel.innerHTML = "";
       // From live list, prefer the official image-preview model
-      (models.models || []).forEach(m => {
+      availableModels.forEach(m => {
+        const provider = String(m.provider || 'gemini').toLowerCase();
+        if (provider !== 'gemini') return;
         const nm = m.name.replace(/^models\//,"");
         if (nm.includes("flash-image")) {
           const opt = document.createElement("option");
@@ -255,79 +2497,632 @@
         const exists = [...imgSel.options].some(o => o.value === s.image_model);
         if (exists) imgSel.value = s.image_model;
       }
+
+      if (narrationSel) {
+        narrationSel.innerHTML = "";
+        narrationSel.removeAttribute("disabled");
+        narrationSel.title = "";
+
+        const allowedNarrationModels = narrationModels.filter((model) => modelSupportsLanguage(model, state.language));
+        allowedNarrationModels.forEach(m => {
+          const value = m.id || m.model_id || m.modelId;
+          if (!value) return;
+          const opt = document.createElement("option");
+          opt.value = value;
+          const labelText = m.name || value;
+          opt.textContent = labelText;
+          narrationSel.appendChild(opt);
+        });
+
+        if (s.narration_model) {
+          const hasModel = [...narrationSel.options].some(o => o.value === s.narration_model);
+          if (hasModel) {
+            narrationSel.value = s.narration_model;
+          } else {
+            const opt = document.createElement("option");
+            opt.value = s.narration_model;
+            opt.textContent = `${s.narration_model} ${t('settings.narrationModel.savedSuffix')}`;
+            narrationSel.appendChild(opt);
+            narrationSel.value = s.narration_model;
+          }
+        }
+
+        if (!allowedNarrationModels.length) {
+          if (!narrationSel.options.length) {
+            const savedNarr = (s.narration_model || "").trim();
+            if (savedNarr) {
+              const opt = document.createElement("option");
+              opt.value = savedNarr;
+              opt.textContent = `${savedNarr} ${t('settings.narrationModel.savedSuffix')}`;
+              narrationSel.appendChild(opt);
+              narrationSel.value = savedNarr;
+            } else {
+              const opt = document.createElement("option");
+              opt.value = "";
+              opt.textContent = t('settings.narrationModel.enterKey');
+              opt.disabled = true;
+              opt.selected = true;
+              narrationSel.appendChild(opt);
+            }
+          }
+          narrationSel.setAttribute("disabled", "true");
+          narrationSel.title = t('settings.narrationModel.disabledTitle');
+        }
+
+        if (allowedNarrationModels.length) {
+          narrationSel.removeAttribute("disabled");
+          narrationSel.title = "";
+        }
+      }
     } catch (e) {
-      alert("Failed to fetch models. Ensure your API key is saved first in Settings.");
+      alert(t('alerts.modelsFetchFailed'));
     }
 
-    // API key handling (we never re-show the secret; user can paste again)
-    $("setKey").value = "";
+    const keyInput = $("setKey");
+    if (keyInput) keyInput.value = typeof s.api_key === 'string' ? s.api_key : '';
+    const grokKeyInput = $("setGrokKey");
+    if (grokKeyInput) grokKeyInput.value = typeof s.grok_api_key === 'string' ? s.grok_api_key : '';
+    const elevenKeyInput = $("setElevenKey");
+    if (elevenKeyInput) {
+      elevenKeyInput.value = typeof s.elevenlabs_api_key === 'string' ? s.elevenlabs_api_key : '';
+    }
+    const shareEl = $("shareUrl");
+    if (shareEl) {
+      const scheme = window.location.protocol === "https:" ? "https" : "http";
+      const portSuffix = window.location.port ? `:${window.location.port}` : "";
+      shareEl.textContent = `${scheme}://<your-public-ip-or-domain>${portSuffix}/`;
+      try {
+        const pubUrl = await (await fetch("/api/public_url")).json();
+        if (pubUrl && pubUrl.url) {
+          shareEl.textContent = pubUrl.url;
+        }
+      } catch (err) {
+        // Fallback placeholder remains visible
+      }
+    }
     $("settingsBack").style.display = "flex";
   }
   $("btnSettings").onclick = openSettings;
   $("btnCloseSettings").onclick = () => $("settingsBack").style.display = "none";
+  initializeWorldStylePicker();
+  const worldStyleSelect = $('setWorld');
+  if (worldStyleSelect) {
+    worldStyleSelect.addEventListener('change', (ev) => {
+      updateWorldPickerDisplay(ev.target.value);
+      updateWorldMenuSelection(ev.target.value);
+    });
+  }
+  const customWorldInputLive = $('setWorldCustom');
+  if (customWorldInputLive) {
+    customWorldInputLive.addEventListener('input', () => {
+      const currentSelect = $('setWorld');
+      if (currentSelect && normalizeWorldStyleValue(currentSelect.value) === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
+        updateWorldPickerDisplay(currentSelect.value);
+      }
+    });
+  }
   $("btnSaveSettings").onclick = async () => {
+    const worldSelectCurrent = $("setWorld");
+    const customWorldInput = $("setWorldCustom");
+    let worldStyleValue = DEFAULT_WORLD_STYLE;
+    if (worldSelectCurrent) {
+      if (worldSelectCurrent.value === CUSTOM_WORLD_VALUE) {
+        const customValue = customWorldInput ? customWorldInput.value.trim() : '';
+        worldStyleValue = customValue || DEFAULT_WORLD_STYLE;
+      } else if (worldSelectCurrent.value) {
+        worldStyleValue = worldSelectCurrent.value;
+      }
+    }
     const body = {
-      world_style: $("setWorld").value,
+      world_style: worldStyleValue,
       difficulty: $("setDiff").value,
+      thinking_mode: $("setThinking").value,
       text_model: $("setTextModel").value,
       image_model: $("setImageModel").value,
     };
+    const historyToggle = $("setHistorySummary");
+    if (historyToggle) {
+      body.history_mode = historyToggle.checked ? 'summary' : 'full';
+    }
+    const fxSaverToggle = $("setFxSaver");
+    const nextFxSaver = fxSaverToggle ? !!fxSaverToggle.checked : false;
+    const narrationSel = $("setNarrationModel");
+    if (narrationSel && !narrationSel.disabled) {
+      const narrationVal = narrationSel.value.trim();
+      if (narrationVal) body.narration_model = narrationVal;
+    }
     const keyVal = $("setKey").value.trim();
     if (keyVal) body.api_key = keyVal;
-    const r = await fetch("/api/settings", {method:"PUT", headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    if (!r.ok) { alert("Failed to save settings."); return; }
+    const grokKeyInput = $("setGrokKey");
+    if (grokKeyInput) {
+      const grokKeyVal = grokKeyInput.value.trim();
+      if (grokKeyVal) body.grok_api_key = grokKeyVal;
+    }
+    const elevenKeyInput = $("setElevenKey");
+    if (elevenKeyInput) {
+      const elevenKeyVal = elevenKeyInput.value.trim();
+      if (elevenKeyVal) body.elevenlabs_api_key = elevenKeyVal;
+    }
+    const resp = await fetch("/api/settings", {
+      method: "PUT",
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) { alert(t('alerts.settingsSaveFailed')); return; }
+    applyFxSaver(nextFxSaver, { persist: true });
     $("settingsBack").style.display = "none";
   };
 
-  // Join
-  $("btnEnter").onclick = async () => {
-    const body = { name: $("name").value || "Hephaest", background: $("background").value || "Wizard" };
-    const r = await fetch("/api/join", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    if (!r.ok) {
-      const t = await r.text(); alert("Join failed: " + t); return;
+  const languageSelect = $('languageSelect');
+  if (languageSelect) {
+    languageSelect.addEventListener('change', (ev) => {
+      setLanguage(ev.target.value, { persist: true, apply: true, notify: true });
+    });
+  }
+
+  function formatDevInfoBlock(value) {
+    if (value == null) return t('devInfo.empty');
+    if (typeof value === 'object') {
+      const isArray = Array.isArray(value);
+      const isEmptyArray = isArray && value.length === 0;
+      const isEmptyObject = !isArray && Object.keys(value).length === 0;
+      if (isEmptyArray || isEmptyObject) {
+        return t('devInfo.empty');
+      }
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (err) {
+        return t('devInfo.empty');
+      }
     }
-    const { player_id } = await r.json();
+    const text = String(value).trim();
+    return text ? text : t('devInfo.empty');
+  }
+
+  function renderDeveloperInfoModal(payload) {
+    const historyMode = String(((payload && payload.history_mode) || 'full')).toLowerCase();
+    const includeScenario = historyMode === 'summary';
+
+    const assignBlock = (
+      element,
+      primaryValue,
+      scenarioValue,
+      primaryHeadingKey,
+      scenarioHeadingKey
+    ) => {
+      if (!element) return;
+      const primaryText = formatDevInfoBlock(primaryValue);
+      const scenarioText = formatDevInfoBlock(scenarioValue);
+      const primaryIsEmpty = primaryText === t('devInfo.empty');
+      const scenarioIsEmpty = scenarioText === t('devInfo.empty');
+      const blocks = [];
+      const primaryHeading = primaryHeadingKey ? t(primaryHeadingKey) : '';
+      const scenarioHeading = scenarioHeadingKey ? t(scenarioHeadingKey) : '';
+
+      const withHeading = (heading, text) => {
+        if (!text) return text;
+        return heading ? `${heading}\n${text}` : text;
+      };
+
+      if (!primaryIsEmpty) {
+        blocks.push(withHeading(primaryHeading, primaryText));
+      }
+
+      if (includeScenario && !scenarioIsEmpty) {
+        blocks.push(withHeading(scenarioHeading, scenarioText));
+      } else if (!includeScenario && primaryIsEmpty && !scenarioIsEmpty && blocks.length === 0) {
+        blocks.push(withHeading(scenarioHeading, scenarioText));
+      }
+
+      if (!blocks.length) {
+        blocks.push(withHeading(primaryHeading, primaryText));
+      }
+
+      element.textContent = blocks.join('\n\n');
+    };
+
+    assignBlock(
+      $("devInfoRequest"),
+      payload && payload.request,
+      payload && payload.scenario_request,
+      includeScenario ? 'devInfo.summaryRequestHeading' : null,
+      includeScenario ? 'devInfo.scenarioRequestHeading' : null
+    );
+
+    assignBlock(
+      $("devInfoResponse"),
+      payload && payload.response,
+      payload && payload.scenario_response,
+      includeScenario ? 'devInfo.summaryResponseHeading' : null,
+      includeScenario ? 'devInfo.scenarioResponseHeading' : null
+    );
+  }
+
+  const devInfoModal = $("devInfoBack");
+  const btnDevInfo = $("btnDevInfo");
+  if (btnDevInfo && devInfoModal) {
+    btnDevInfo.addEventListener('click', async () => {
+      try {
+        const resp = await fetch('/api/dev/text_inspect');
+        if (!resp.ok) throw new Error('status');
+        const data = await resp.json();
+        renderDeveloperInfoModal(data || {});
+        devInfoModal.style.display = 'flex';
+      } catch (err) {
+        alert(t('devInfo.fetchError'));
+      }
+    });
+  }
+  const btnCloseDevInfo = $("btnCloseDevInfo");
+  if (btnCloseDevInfo && devInfoModal) {
+    btnCloseDevInfo.addEventListener('click', () => {
+      devInfoModal.style.display = 'none';
+    });
+  }
+
+  $("btnStats").onclick = () => {
+    if (state.lastPublic) {
+      updateStats(state.lastPublic.token_usage);
+    }
+    $("statsBack").style.display = "flex";
+  };
+  $("btnCloseStats").onclick = () => $("statsBack").style.display = "none";
+
+  $("btnStatsText").onclick = () => {
+    if (state.lastPublic) {
+      updateStats(state.lastPublic.token_usage);
+    }
+    $("statsTextBack").style.display = "flex";
+  };
+  $("btnCloseStatsText").onclick = () => $("statsTextBack").style.display = "none";
+
+  $("btnStatsImage").onclick = () => {
+    if (state.lastPublic) {
+      updateStats(state.lastPublic.token_usage);
+    }
+    $("statsImageBack").style.display = "flex";
+  };
+  $("btnCloseStatsImage").onclick = () => $("statsImageBack").style.display = "none";
+
+  $("btnStatsNarration").onclick = () => {
+    if (state.lastPublic) {
+      updateStats(state.lastPublic.token_usage);
+    }
+    $("statsNarrationBack").style.display = "flex";
+  };
+  $("btnCloseStatsNarration").onclick = () => $("statsNarrationBack").style.display = "none";
+
+  const narrationButton = $("btnNarration");
+  if (narrationButton) {
+    if (narrationButton.title) {
+      narrationButton.title = `${narrationButton.title} (Alt+N)`;
+    }
+    syncNarrationToggle(state.autoTtsEnabled);
+    narrationButton.addEventListener("click", async () => {
+      if (!state.playerId || !state.playerToken) {
+        alert(t('alerts.joinControl'));
+        return;
+      }
+      const nextState = !state.autoTtsEnabled;
+      narrationButton.setAttribute("disabled", "true");
+      try {
+        const resp = await fetch("/api/tts_toggle", {
+          method: "POST",
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ player_id: state.playerId, token: state.playerToken, enabled: nextState }),
+        });
+        if (!resp.ok) {
+          await handleActionError(resp, 'alerts.toggleNarrationFailed');
+          return;
+        }
+        const result = await resp.json();
+        syncNarrationToggle(result && result.auto_tts_enabled);
+      } catch (err) {
+        const message = err && err.message ? err.message : err;
+        alert(t('alerts.toggleNarrationFailedDetail', { message }));
+      } finally {
+        narrationButton.removeAttribute("disabled");
+        narrationButton.disabled = !state.playerId;
+      }
+    });
+  }
+
+  // Join
+  const joinNameInput = $("name");
+  const joinBackgroundInput = $("background");
+  if (joinNameInput) {
+    joinNameInput.addEventListener("input", () => {
+      rememberJoinInputs(joinNameInput.value, joinBackgroundInput ? joinBackgroundInput.value : "");
+    });
+  }
+  if (joinBackgroundInput) {
+    joinBackgroundInput.addEventListener("input", () => {
+      rememberJoinInputs(joinNameInput ? joinNameInput.value : "", joinBackgroundInput.value);
+    });
+  }
+  $("btnEnter").onclick = async () => {
+    const nameVal = $("name").value || "Hephaest";
+    const backgroundVal = $("background").value || "Wizard";
+    rememberJoinInputs(nameVal, backgroundVal);
+    const activeScenario = scenarioIsActive();
+    setJoinWaiting(true);
+    startButtonCountdown('btnEnter', (seconds) => t('join.countdown', { seconds }));
+    if (activeScenario) {
+      updateJoinStatus('', { key: 'join.status.requestSent' });
+    } else {
+      updateJoinStatus('', { key: 'join.status.creatingWorld' });
+    }
+    const body = { name: nameVal, background: backgroundVal, language: state.language };
+    let resp;
+    try {
+      resp = await fetch("/api/join", {
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+    } catch (err) {
+      setJoinWaiting(false);
+      updateJoinStatus("");
+      alert(t('alerts.joinFailedDetail', { message: err.message }));
+      return;
+    }
+    if (!resp.ok) {
+      setJoinWaiting(false);
+      updateJoinStatus("");
+      const errorText = await resp.text();
+      alert(t('alerts.joinFailedDetail', { message: errorText }));
+      return;
+    }
+    const { player_id, auth_token } = await resp.json();
     state.playerId = player_id;
-    // Switch UI
-    $("joinView").style.display = "none";
-    $("gameView").style.display = "";
-    $("side").style.display = "";
+    state.playerToken = auth_token;
+    state.playerName = nameVal;
+    state.playerBackground = backgroundVal;
+    state.pendingJoin = true;
+    syncNarrationToggle(state.autoTtsEnabled);
+    persistPlayerSession({
+      id: player_id,
+      token: auth_token,
+      name: nameVal,
+      background: backgroundVal,
+      pending: true,
+    });
+    updateJoinStatus('', { key: 'join.status.queueAfterTurn' });
+    showJoinView();
     connectWS();
   };
 
   // Actions
-  $("btnSubmit").onclick = async () => {
-    if (!state.playerId) return;
-    const txt = $("action").value.trim();
-    if (!txt) return;
-    const r = await fetch("/api/submit", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({player_id: state.playerId, text: txt})});
-    if (!r.ok) alert("Submit failed.");
-    else $("action").value = "";
+  const actionBox = $("action");
+  const submitAction = async () => {
+    if (!state.playerId || !state.playerToken || !actionBox) return false;
+    const txt = actionBox.value.trim();
+    if (!txt) return false;
+    let resp;
+    try {
+      resp = await fetch("/api/submit", {
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          player_id: state.playerId,
+          token: state.playerToken,
+          text: txt,
+          language: state.language,
+        })
+      });
+      if (!resp.ok) {
+        await handleActionError(resp, 'alerts.submitFailed');
+        return false;
+      }
+      actionBox.value = "";
+      return true;
+    } catch (err) {
+      const message = err && err.message ? err.message : err;
+      alert(t('alerts.submitFailedDetail', { message }));
+      return false;
+    }
   };
+  $("btnSubmit").onclick = submitAction;
+  if (actionBox) {
+    actionBox.addEventListener("keydown", async (ev) => {
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+        ev.preventDefault();
+        const didSubmit = await submitAction();
+        if (didSubmit) {
+          const btnNextTurn = $("btnNextTurn");
+          if (btnNextTurn) btnNextTurn.click();
+        }
+      }
+    });
+  }
   $("btnNextTurn").onclick = async () => {
-    if (!state.playerId) return;
-    const r = await fetch("/api/next_turn", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({player_id: state.playerId})});
-    if (!r.ok) {
-      const t = await r.text(); alert("Next turn failed: " + t);
+    if (!state.playerId || !state.playerToken) return;
+    startButtonCountdown('btnNextTurn', (seconds) => t('game.advanceCountdown', { seconds }));
+    let resp;
+    try {
+      resp = await fetch("/api/next_turn", {
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          player_id: state.playerId,
+          token: state.playerToken,
+          language: state.language,
+        })
+      });
+      if (!resp.ok) {
+        await handleActionError(resp, 'alerts.nextTurnFailed');
+        return;
+      }
+    } catch (err) {
+      const message = err && err.message ? err.message : err;
+      alert(t('alerts.nextTurnFailedDetail', { message }));
+    } finally {
+      stopButtonCountdown('btnNextTurn');
     }
   };
-  $("btnCreateImage").onclick = async () => {
-    if (!state.playerId) return;
-    const r = await fetch("/api/create_image", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({player_id: state.playerId})});
-    if (!r.ok) {
-      const t = await r.text(); alert("Create Image failed: " + t);
+  const imageButton = $("btnCreateImage");
+  if (imageButton) {
+    if (imageButton.title) {
+      imageButton.title = `${imageButton.title} (Alt+I)`;
     }
-  };
+    syncSceneImageToggle(state.autoImageEnabled);
+    imageButton.addEventListener("click", async () => {
+      if (!state.playerId || !state.playerToken) {
+        alert(t('alerts.joinControlImage'));
+        return;
+      }
+      const nextState = !state.autoImageEnabled;
+      imageButton.setAttribute("disabled", "true");
+      try {
+        const resp = await fetch("/api/image_toggle", {
+          method: "POST",
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            player_id: state.playerId,
+            token: state.playerToken,
+            enabled: nextState,
+          }),
+        });
+        if (!resp.ok) {
+          await handleActionError(resp, 'alerts.toggleImageFailed');
+          return;
+        }
+        const result = await resp.json();
+        syncSceneImageToggle(result && result.auto_image_enabled);
+      } catch (err) {
+        const message = err && err.message ? err.message : err;
+        alert(t('alerts.toggleImageFailedDetail', { message }));
+      } finally {
+        const busy = Boolean(state.lock && state.lock.active);
+        if (!busy) {
+          imageButton.removeAttribute("disabled");
+        }
+        imageButton.disabled = !state.playerId || Boolean(state.lock && state.lock.active);
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === "Escape") {
+      if (closeOpenModals()) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      return;
+    }
+
+    if (ev.repeat) return;
+    if (!ev.altKey || ev.ctrlKey || ev.metaKey) return;
+
+    const key = (ev.key || '').toLowerCase();
+    if (key === 'n') {
+      const button = $("btnNarration");
+      if (button && !button.disabled) {
+        ev.preventDefault();
+        button.click();
+      }
+    } else if (key === 'i') {
+      const button = $("btnCreateImage");
+      if (button && !button.disabled) {
+        ev.preventDefault();
+        button.click();
+      }
+    }
+  });
+
+  async function requestPortrait(buttonEl) {
+    if (!state.playerId || !state.playerToken) return;
+    if (buttonEl) {
+      buttonEl.dataset.clickable = "false";
+      buttonEl.onclick = null;
+    }
+    let resp;
+    try {
+      resp = await fetch("/api/create_portrait", {
+        method: "POST",
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ player_id: state.playerId, token: state.playerToken }),
+      });
+    } catch (err) {
+      if (buttonEl && !(state.lock && state.lock.active)) {
+        updatePortraitButtonState(buttonEl, Boolean(state.lock && state.lock.active));
+      }
+      alert(t('alerts.portraitFailedDetail', { message: err.message }));
+      return;
+    }
+    if (!resp.ok) {
+      if (buttonEl && !(state.lock && state.lock.active)) {
+        updatePortraitButtonState(buttonEl, Boolean(state.lock && state.lock.active));
+      }
+      await handleActionError(resp, 'alerts.portraitFailed');
+    }
+  }
+
+  function handleNarrationAudio(data) {
+    if (!data || typeof data.audio_base64 !== 'string' || !data.audio_base64) return;
+    if (!state.autoTtsEnabled) return;
+    const format = typeof data.format === 'string' ? data.format.toLowerCase() : '';
+    let mime = 'audio/mpeg';
+    if (format.startsWith('opus')) {
+      mime = 'audio/ogg; codecs=opus';
+    } else if (format.startsWith('pcm')) {
+      mime = 'audio/wav';
+    } else if (format.startsWith('ulaw') || format.startsWith('alaw')) {
+      mime = 'audio/basic';
+    }
+    const src = `data:${mime};base64,${data.audio_base64}`;
+    if (narrationState.current) {
+      try { narrationState.current.pause(); } catch (err) { /* ignore */ }
+      narrationState.current.src = '';
+      narrationState.current = null;
+    }
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    audio.autoplay = true;
+    audio.onended = () => {
+      if (narrationState.current === audio) {
+        narrationState.current = null;
+      }
+    };
+    audio.onpause = () => {
+      if (!audio.ended && narrationState.current === audio) {
+        narrationState.current = null;
+      }
+    };
+    narrationState.current = audio;
+    hideSystemNotice('error');
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch((err) => {
+        console.warn('Narration playback was blocked by the browser.', err);
+      });
+    }
+  }
+
+  function handleNarrationError(data) {
+    const raw = data && typeof data.message === 'string' ? data.message.trim() : '';
+    const severity = data && typeof data.severity === 'string' ? data.severity : 'error';
+    const message = raw || 'ElevenLabs narration failed.';
+    showSystemNotice(message, severity === 'error' ? 'error' : 'info');
+  }
 
   // WebSocket
   let ws;
   function connectWS() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      try { ws.close(); } catch (err) { /* ignore */ }
+    }
     const url = new URL(location.origin.replace(/^http/,"ws") + "/ws");
-    if (state.playerId) url.searchParams.set("player_id", state.playerId);
+    if (state.playerId && state.playerToken) {
+      url.searchParams.set("player_id", state.playerId);
+      url.searchParams.set("auth_token", state.playerToken);
+    }
     ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.event === "state") renderPublic(msg.data);
+      else if (msg.event === "tts_audio") handleNarrationAudio(msg.data);
+      else if (msg.event === "tts_error") handleNarrationError(msg.data);
       else if (msg.event === "private") renderPrivate(msg.data);
       else if (msg.event === "announce") console.log(msg.data.message);
     };
@@ -336,16 +3131,65 @@
       setTimeout(connectWS, 2000);
     };
   }
-  // Connect as spectator initially (before join), so you can see current scenario/submissions
-  connectWS();
-
   // Renderers
   function renderPublic(s) {
-    $("turnIdx").textContent = s.turn_index ?? 0;
-    $("worldStyle").textContent = s.world_style || "—";
-    $("worldDiff").textContent = s.difficulty || "—";
-    $("scenario").textContent = s.current_scenario || "—";
+    const previousPublic = state.lastPublic;
+    state.lastPublic = s;
+    const serverLanguage = (s && typeof s.language === 'string') ? s.language : null;
+    if (serverLanguage && SUPPORTED_LANGUAGES.includes(serverLanguage)) {
+      if (serverLanguage !== state.language) {
+        setLanguage(serverLanguage, { persist: true, apply: true });
+      }
+      lastLanguageSync = serverLanguage;
+    }
+    state.autoImageEnabled = Boolean(s && s.auto_image_enabled);
+    syncNarrationToggle(Boolean(s && s.auto_tts_enabled));
+    refreshJoinGuidance();
+    if (state.pendingJoin === true && state.playerId && state.playerToken) {
+      handleJoinState(true);
+    }
+    const turnVal = typeof s.turn_index === 'number' ? s.turn_index : 0;
+    if (Number.isFinite(turnVal)) {
+      updateTurnHeader(turnVal);
+    }
+    const scenarioEl = $("scenario");
+    if (scenarioEl) {
+      const previousTurn = typeof previousPublic?.turn_index === 'number' ? previousPublic.turn_index : null;
+      const previousTextRaw = typeof previousPublic?.current_scenario === 'string' ? previousPublic.current_scenario : '';
+      const previousTrimmed = previousTextRaw.trim();
+      const text = typeof s.current_scenario === 'string' ? s.current_scenario : '';
+      const trimmedText = text.trim();
+      const hasText = trimmedText.length > 0;
+      const targetTurn = Number.isFinite(turnVal) && (turnVal > 0 || hasText) ? turnVal : null;
+
+      if (targetTurn != null) {
+        const block = getScenarioBlock(targetTurn, hasText);
+        if (block) {
+          block.textContent = hasText ? text : '—';
+        }
+      } else if (!scenarioEl.dataset.historyReady) {
+        scenarioEl.textContent = hasText ? text : '—';
+      }
+
+      const turnChanged = Number.isFinite(turnVal) && previousTurn !== turnVal;
+      const textChanged = trimmedText !== previousTrimmed;
+      if (turnChanged) {
+        scenarioScrollState.lastTurnScrolled = null;
+      }
+      if ((turnChanged || textChanged) && hasText) {
+        const shouldStick = scenarioIsPinnedToBottom(scenarioEl);
+        if (shouldStick) {
+          const alreadyScrolled = Number.isFinite(turnVal) && scenarioScrollState.lastTurnScrolled === turnVal;
+          if (!alreadyScrolled) {
+            scrollScenarioToBottom();
+            scenarioScrollState.lastTurnScrolled = Number.isFinite(turnVal) ? turnVal : null;
+          }
+        }
+      }
+    }
+    updateStats(s.token_usage);
     setLockBanner(s.lock || {active:false});
+    syncSceneImageToggle(state.autoImageEnabled);
 
     const ul = $("submissions");
     ul.innerHTML = "";
@@ -357,14 +3201,96 @@
 
     const pl = $("players");
     pl.innerHTML = "";
-    (s.players || []).forEach(p => {
+    hidePortraitPreview();
+    const lockActive = Boolean(state.lock && state.lock.active);
+    (s.players || []).forEach((p) => {
       const li = document.createElement("li");
+
+      const main = document.createElement("div");
+      main.className = "player-main";
+
+      const portraitBtn = document.createElement("button");
+      portraitBtn.type = "button";
+      portraitBtn.className = "player-portrait";
+      portraitBtn.dataset.playerId = p.id || "";
+      const isYou = Boolean(state.playerId && p.id && state.playerId === p.id);
+      portraitBtn.dataset.owned = isYou ? "true" : "false";
+      portraitBtn.dataset.pending = p.pending_join ? "true" : "false";
+      const portrait = p.portrait || null;
+      if (portrait && portrait.data_url) {
+        portraitBtn.style.backgroundImage = `url(${portrait.data_url})`;
+        portraitBtn.classList.add("has-image");
+        portraitBtn.textContent = "";
+        portraitBtn.dataset.hasImage = "true";
+        portraitBtn.dataset.portraitUrl = portrait.data_url;
+        portraitBtn.dataset.portraitPrompt = portrait.prompt || "";
+        portraitBtn.addEventListener("mouseenter", (ev) => showPortraitPreview(portraitBtn.dataset.portraitUrl, portraitBtn.dataset.portraitPrompt, ev, portraitBtn));
+        portraitBtn.addEventListener("mousemove", (ev) => updatePortraitPreviewPosition(ev, portraitBtn));
+        portraitBtn.addEventListener("mouseleave", hidePortraitPreview);
+        portraitBtn.addEventListener("focus", () => showPortraitPreview(portraitBtn.dataset.portraitUrl, portraitBtn.dataset.portraitPrompt, null, portraitBtn));
+        portraitBtn.addEventListener("blur", hidePortraitPreview);
+      } else {
+        portraitBtn.style.backgroundImage = "";
+        portraitBtn.classList.remove("has-image");
+        const initial = (p.name || "?").trim().charAt(0).toUpperCase() || "?";
+        portraitBtn.textContent = initial;
+        portraitBtn.dataset.hasImage = "false";
+        portraitBtn.dataset.portraitUrl = "";
+        portraitBtn.dataset.portraitPrompt = "";
+        portraitBtn.addEventListener("mouseenter", hidePortraitPreview);
+        portraitBtn.addEventListener("mouseleave", hidePortraitPreview);
+        portraitBtn.addEventListener("focus", hidePortraitPreview);
+        portraitBtn.addEventListener("blur", hidePortraitPreview);
+      }
+      const portraitName = p.name || t('game.playerFallback');
+      portraitBtn.setAttribute('aria-label', t('game.portrait.ariaLabel', { name: portraitName }));
+      updatePortraitButtonState(portraitBtn, lockActive);
+
+      const nameWrap = document.createElement("div");
+      nameWrap.className = "player-name";
+
+      const nameRow = document.createElement("div");
+      nameRow.className = "player-name-row";
+
       const name = document.createElement("div");
-      name.textContent = p.name + (p.pending_join ? " (joining soon)" : "");
-      const status = document.createElement("div");
+      name.className = "player-name-main";
+      name.textContent = p.name;
+      nameRow.appendChild(name);
+
+      const status = document.createElement("span");
       status.textContent = p.status_word || "—";
-      status.className = pillClass(p.status_word);
-      li.appendChild(name); li.appendChild(status);
+      status.className = `${pillClass(p.status_word)} player-status`;
+      nameRow.appendChild(status);
+
+      nameWrap.appendChild(nameRow);
+
+      const cls = document.createElement("div");
+      cls.className = "player-class";
+      cls.textContent = p.cls || "—";
+      nameWrap.appendChild(cls);
+
+      const tags = document.createElement("div");
+      tags.className = "player-tags";
+      if (p.pending_join) {
+        const joinTag = document.createElement("span");
+        joinTag.className = "pill warn";
+        joinTag.textContent = t('game.playerTag.joining');
+        tags.appendChild(joinTag);
+      }
+      if (p.pending_leave) {
+        const leaveTag = document.createElement("span");
+        leaveTag.className = "pill bad";
+        leaveTag.textContent = t('game.playerTag.departing');
+        tags.appendChild(leaveTag);
+      }
+      if (tags.children.length) {
+        nameWrap.appendChild(tags);
+      }
+
+      main.appendChild(portraitBtn);
+      main.appendChild(nameWrap);
+
+      li.appendChild(main);
       pl.appendChild(li);
     });
 
@@ -372,37 +3298,444 @@
     if (s.image && s.image.data_url) {
       img.src = s.image.data_url;
       img.title = s.image.prompt || "";
-    }
-
-    // Enable game view for spectators when a scenario exists
-    if ($("gameView").style.display === 'none' && s.current_scenario) {
-      $("gameView").style.display = "";
-      $("side").style.display = "";
+      img.style.display = "";
+    } else {
+      img.removeAttribute("src");
+      img.title = "";
+      img.style.display = "none";
     }
   }
 
   function renderPrivate(data) {
-    const y = data.you || {};
-    $("youName").textContent = y.name || "—";
-    $("youClass").textContent = y.class || "—";
-    const abl = $("youAbilities"); abl.innerHTML = "";
-    (y.abilities || []).forEach(a => {
-      const li = document.createElement("li");
-      li.textContent = `${a.n} (${a.x})`;
-      abl.appendChild(li);
-    });
-    const inv = $("youInv"); inv.innerHTML = "";
-    (y.inventory || []).forEach(i => {
-      const li = document.createElement("li"); li.textContent = i; inv.appendChild(li);
-    });
-    const cond = $("youCond"); cond.innerHTML = "";
-    (y.conditions || []).forEach(c => {
-      const li = document.createElement("li"); li.textContent = c; cond.appendChild(li);
-    });
+    const y = data && data.you ? data.you : {};
+    if (!y || !y.id) {
+      state.lastPrivate = null;
+      return;
+    }
+    state.lastPrivate = data;
+    if (!state.playerId) {
+      state.playerId = y.id;
+      syncNarrationToggle(state.autoTtsEnabled);
+      syncSceneImageToggle(state.autoImageEnabled);
+    }
+    state.playerName = y.name || state.playerName || '';
+    if (typeof y.pending_join === 'boolean') {
+      handleJoinState(y.pending_join);
+    }
+    const youFlags = $("youFlags");
+    if (youFlags) {
+      youFlags.innerHTML = "";
+      youFlags.style.display = "none";
+      if (y.pending_join) {
+        const joinTag = document.createElement("span");
+        joinTag.className = "pill warn";
+        joinTag.textContent = t('game.playerFlag.queued');
+        youFlags.appendChild(joinTag);
+      }
+      if (y.pending_leave) {
+        const leaveTag = document.createElement("span");
+        leaveTag.className = "pill bad";
+        leaveTag.textContent = t('game.playerFlag.departing');
+        youFlags.appendChild(leaveTag);
+      }
+      if (youFlags.children.length) {
+        youFlags.style.display = "flex";
+      }
+    }
+    renderAbilityList($("youAbilities"), y.abilities);
+    renderInventoryList($("youInv"), y.inventory);
+    renderConditionList($("youCond"), y.conditions);
   }
 
-  // Initial public state for spectators
-  fetch("/api/state").then(r => r.json()).then(renderPublic);
+  function updateStats(usage) {
+    const usageData = usage || {};
+    const last = usageData.last_turn || {};
+    const session = usageData.session || {};
+    const totals = usageData.totals || {};
+    const breakdown = (totals && totals.breakdown) || {};
+    const imageData = usageData.image || {};
+    const imageLast = imageData.last || {};
+    const imageSession = imageData.session || {};
+    const safeSet = (id, value) => {
+      const el = $(id);
+      if (el) el.textContent = value;
+    };
+    const formatParts = (src) => {
+      const keys = ["input", "output", "thinking"];
+      return keys.map((key) => {
+        const val = src && src[key];
+        return Number.isFinite(val) ? val.toLocaleString() : "—";
+      }).join(" / ");
+    };
+    const formatTotal = (value) => Number.isFinite(value) ? value.toLocaleString() : "—";
+    const formatCurrency = (value, precision = 4) => (
+      Number.isFinite(value) ? `$${Number(value).toFixed(precision)}` : "—"
+    );
+    const formatNumber = (value) => (Number.isFinite(value) ? value.toLocaleString() : "—");
+    const formatImageTypeCounts = (entries) => {
+      const src = entries && typeof entries === 'object' ? entries : {};
+      const scene = Number.isFinite(src.scene) ? src.scene : 0;
+      const portrait = Number.isFinite(src.portrait) ? src.portrait : 0;
+      const sceneLabel = t('stats.image.type.scene');
+      const portraitLabel = t('stats.image.type.portrait');
+      const baseParts = [`${sceneLabel}: ${scene}`, `${portraitLabel}: ${portrait}`];
+      const extraParts = Object.entries(src)
+        .filter(([key]) => key !== 'scene' && key !== 'portrait')
+        .map(([key, val]) => {
+          if (!Number.isFinite(val)) return null;
+          const labelKey = `stats.image.type.${key}`;
+          const label = TRANSLATIONS[labelKey] ? t(labelKey) : key;
+          return `${label}: ${val}`;
+        })
+        .filter(Boolean);
+      return [...baseParts, ...extraParts].join(', ');
+    };
+
+    const formatCredits = (value) => {
+      if (Number.isFinite(value)) {
+        const abs = Math.abs(value);
+        const fractionDigits = abs >= 1000 ? 0 : abs >= 100 ? 1 : 2;
+        return value.toLocaleString(undefined, { maximumFractionDigits: fractionDigits });
+      }
+      return "—";
+    };
+
+    safeSet("statsCostLast", formatCurrency(totals.last_usd));
+    safeSet("statsCostSession", formatCurrency(totals.session_usd));
+    safeSet("statsTextCostLast", formatCurrency(last.cost_usd));
+    safeSet("statsTextCostSession", formatCurrency(session.cost_usd));
+    safeSet("statsTextTokensLast", formatParts(last));
+    safeSet("statsTextTokensSession", formatParts(session));
+    safeSet("statsTextTokensLastTotal", formatTotal(last.total));
+    safeSet("statsTextTokensSessionTotal", formatTotal(session.total));
+    const tokensPerSec = Number.isFinite(last.tokens_per_sec)
+      ? `${last.tokens_per_sec.toFixed(1)} ${t('stats.text.rateUnit')}`
+      : "—";
+    safeSet("statsTextRate", tokensPerSec);
+    const reqVal = session.requests;
+    safeSet("statsTextRequests", (reqVal === null || reqVal === undefined) ? "—" : `${reqVal}`);
+
+    const imageTurnCostValue = Number.isFinite(breakdown.image_last_turn_usd)
+      ? breakdown.image_last_turn_usd
+      : null;
+    safeSet("statsImageCostLast", formatCurrency(imageTurnCostValue));
+    safeSet("statsImageCostSession", formatCurrency(imageSession.cost_usd));
+    safeSet("statsImageModel", imageLast.model ? imageLast.model : "—");
+    safeSet("statsImageCountSession", formatNumber(imageSession.images));
+
+    const unitCost = formatCurrency(imageLast.usd_per_image, 3);
+    const avgCost = Number.isFinite(imageSession.avg_usd_per_image)
+      ? formatCurrency(imageSession.avg_usd_per_image, 3)
+      : null;
+    let unitLabel = unitCost;
+    const avgPrefix = t('stats.image.avgPrefix');
+    if (unitLabel === '—' && avgCost) {
+      unitLabel = `${avgPrefix} ${avgCost}`;
+    } else if (unitCost !== '—' && avgCost && unitCost !== avgCost) {
+      unitLabel = `${unitCost} (${avgPrefix} ${avgCost})`;
+    }
+    safeSet("statsImageAvgCost", unitLabel);
+    const turnCounts = formatImageTypeCounts((imageData.turn && imageData.turn.by_kind) || {});
+    safeSet("statsImageTurnCounts", turnCounts);
+    const sessionCounts = formatImageTypeCounts(imageSession.by_kind);
+    safeSet("statsImageSessionCounts", sessionCounts);
+
+    const narrationData = usageData.narration || {};
+    const narrationLast = narrationData.last || {};
+    const narrationSession = narrationData.session || {};
+    safeSet("statsNarrationCostLast", formatCurrency(narrationLast.cost_usd));
+    safeSet("statsNarrationCostSession", formatCurrency(narrationSession.cost_usd));
+
+    safeSet("statsNarrationCharsLast", formatNumber(narrationLast.characters));
+    safeSet("statsNarrationCharsSession", formatNumber(narrationSession.characters));
+
+    safeSet("statsNarrationCreditsLast", formatCredits(narrationLast.credits));
+    safeSet("statsNarrationCreditsSession", formatCredits(narrationSession.credits));
+
+    safeSet("statsNarrationModel", narrationLast.model || "—");
+    safeSet("statsNarrationVoice", narrationLast.voice_id || "—");
+    safeSet("statsNarrationRequests", formatNumber(narrationSession.requests));
+    const remainingCredits = narrationSession.remaining_credits ?? narrationLast.remaining_credits;
+    safeSet("statsNarrationCreditsRemaining", formatNumber(remainingCredits));
+  }
+
+  // Enable drag-and-drop reordering for all panes (with dynamic lanes)
+  function enablePaneReorder() {
+    const board = document.querySelector('[data-pane-board]');
+    if (!board) return;
+
+    const laneSelector = '.col[data-pane-group]';
+    const baseLaneIds = new Set(['main', 'sidebar']);
+    const maxLanes = 4;
+    const draggingClass = 'dragging';
+    const storageKey = 'paneLayout:v2';
+    let dropZone = null;
+
+    const getLanes = () => [...board.querySelectorAll(laneSelector)];
+    const getCards = () => [...board.querySelectorAll('.card[data-pane-id]')];
+
+    const canStore = (() => {
+      try {
+        const key = '__pane_test';
+        localStorage.setItem(key, '1');
+        localStorage.removeItem(key);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    })();
+
+    if (canStore) {
+      ['paneOrder:main', 'paneOrder:sidebar'].forEach((oldKey) => {
+        try {
+          localStorage.removeItem(oldKey);
+        } catch (err) {
+          /* ignore removal failures */
+        }
+      });
+    }
+
+    const uniqueLaneId = (() => {
+      let counter = 0;
+      return () => {
+        counter += 1;
+        return `lane-${Date.now()}-${counter}`;
+      };
+    })();
+
+    const clearTargets = () => {
+      getLanes().forEach((lane) => lane.classList.remove('drag-target'));
+      if (dropZone) dropZone.classList.remove('drag-target');
+    };
+
+    const cleanupEmptyLanes = () => {
+      getLanes().forEach((lane) => {
+        const id = lane.dataset.paneGroup;
+        if (!id) return;
+        if (!baseLaneIds.has(id) && !lane.querySelector('.card[data-pane-id]')) {
+          lane.remove();
+        }
+      });
+    };
+
+    const persist = () => {
+      cleanupEmptyLanes();
+      if (!canStore) return;
+      const layout = getLanes().map((lane) => ({
+        id: lane.dataset.paneGroup,
+        panes: [...lane.querySelectorAll('.card[data-pane-id]')].map((card) => card.dataset.paneId),
+      }));
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ lanes: layout }));
+      } catch (err) {
+        /* ignore storage failures */
+      }
+    };
+
+    const getDragAfterElement = (lane, y) => {
+      const cards = [...lane.querySelectorAll('.card[data-pane-id]:not(.' + draggingClass + ')')];
+      return cards.reduce(
+        (closest, child) => {
+          const box = child.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+          }
+          return closest;
+        },
+        { offset: Number.NEGATIVE_INFINITY, element: null }
+      ).element;
+    };
+
+    const attachLaneHandlers = (lane) => {
+      if (!lane || lane.dataset.laneBound) return;
+      lane.dataset.laneBound = 'true';
+      lane.addEventListener('dragover', (ev) => {
+        const dragging = document.querySelector('.' + draggingClass);
+        if (!dragging) return;
+        ev.preventDefault();
+        const after = getDragAfterElement(lane, ev.clientY);
+        if (after) lane.insertBefore(dragging, after);
+        else lane.appendChild(dragging);
+        lane.classList.add('drag-target');
+      });
+      lane.addEventListener('dragleave', (ev) => {
+        const next = ev.relatedTarget;
+        if (!next || !lane.contains(next)) {
+          lane.classList.remove('drag-target');
+        }
+      });
+      lane.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        lane.classList.remove('drag-target');
+        persist();
+      });
+    };
+
+    const createLaneElement = (id) => {
+      const lane = document.createElement('section');
+      lane.className = 'col';
+      lane.dataset.paneGroup = id;
+      lane.style.display = '';
+      board.insertBefore(lane, dropZone && dropZone.parentElement === board ? dropZone : null);
+      attachLaneHandlers(lane);
+      return lane;
+    };
+
+    const showDropZone = () => {
+      if (getLanes().length >= maxLanes) return;
+      if (!dropZone) {
+        dropZone = document.createElement('div');
+        dropZone.className = 'col lane-drop';
+        dropZone.dataset.newLane = 'true';
+        dropZone.textContent = t('game.dropZone');
+        dropZone.addEventListener('dragover', (ev) => {
+          const dragging = document.querySelector('.' + draggingClass);
+          if (!dragging) return;
+          ev.preventDefault();
+          dropZone.classList.add('drag-target');
+        });
+        dropZone.addEventListener('dragleave', () => {
+          dropZone.classList.remove('drag-target');
+        });
+        dropZone.addEventListener('drop', (ev) => {
+          ev.preventDefault();
+          dropZone.classList.remove('drag-target');
+          const dragging = document.querySelector('.' + draggingClass);
+          if (!dragging) return;
+          const newLane = createLaneElement(uniqueLaneId());
+          newLane.appendChild(dragging);
+          persist();
+        });
+      }
+      if (!dropZone.parentElement) {
+        board.appendChild(dropZone);
+      }
+    };
+
+    const hideDropZone = () => {
+      if (dropZone && dropZone.parentElement) {
+        dropZone.classList.remove('drag-target');
+        board.removeChild(dropZone);
+      }
+    };
+
+    const attachCardHandlers = (card) => {
+      if (!card || card.dataset.paneBound) return;
+      card.dataset.paneBound = 'true';
+      card.setAttribute('draggable', 'true');
+      card.addEventListener('dragstart', (ev) => {
+        card.classList.add(draggingClass);
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = 'move';
+          ev.dataTransfer.setData('text/plain', card.dataset.paneId || '');
+        }
+        showDropZone();
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove(draggingClass);
+        hideDropZone();
+        clearTargets();
+        persist();
+      });
+    };
+
+    const restore = () => {
+      if (!canStore) return;
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      let saved;
+      try {
+        saved = JSON.parse(raw);
+      } catch (err) {
+        return;
+      }
+      if (!saved || !Array.isArray(saved.lanes)) return;
+
+      const cards = new Map(getCards().map((card) => [card.dataset.paneId, card]));
+      const placed = new Set();
+      const lanesById = new Map(getLanes().map((lane) => [lane.dataset.paneGroup, lane]));
+
+      saved.lanes.slice(0, maxLanes).forEach((laneData) => {
+        if (!laneData || !laneData.id) return;
+        let lane = lanesById.get(laneData.id);
+        if (!lane) {
+          lane = createLaneElement(laneData.id);
+          lanesById.set(laneData.id, lane);
+        } else {
+          board.appendChild(lane);
+        }
+        laneData.panes.forEach((paneId) => {
+          const card = cards.get(paneId);
+          if (card) {
+            lane.appendChild(card);
+            placed.add(paneId);
+          }
+        });
+      });
+
+      cards.forEach((card, paneId) => {
+        if (!placed.has(paneId)) {
+          let targetLane = lanesById.get('main');
+          if (!targetLane) {
+            targetLane = getLanes()[0] || createLaneElement('main');
+            lanesById.set(targetLane.dataset.paneGroup, targetLane);
+          }
+          targetLane.appendChild(card);
+        }
+      });
+
+      cleanupEmptyLanes();
+    };
+
+    getCards().forEach(attachCardHandlers);
+    getLanes().forEach(attachLaneHandlers);
+    restore();
+    persist();
+  }
+
+  enablePaneReorder();
+
+  function initClient() {
+    showJoinView();
+    setJoinWaiting(false);
+    updateJoinStatus("");
+    const stored = getStoredPlayer();
+    if (stored) {
+      applyStoredJoinInputs(stored);
+      if (typeof stored.name === 'string') {
+        state.playerName = stored.name;
+      }
+      if (typeof stored.background === 'string') {
+        state.playerBackground = stored.background;
+      }
+      if (stored.id && stored.token) {
+        state.playerId = stored.id;
+        state.playerToken = stored.token;
+        state.pendingJoin = typeof stored.pending === 'boolean' ? stored.pending : null;
+        syncNarrationToggle(state.autoTtsEnabled);
+        if (stored.pending === true) {
+          setJoinWaiting(true);
+          updateJoinStatus('', { key: 'join.status.waitingQueued' });
+          showJoinView();
+        } else if (stored.pending === false) {
+          updateJoinStatus("");
+          setJoinWaiting(false);
+          showGameView();
+        } else {
+          setJoinWaiting(true);
+          updateJoinStatus('', { key: 'join.status.restoring' });
+        }
+      }
+    }
+    connectWS();
+    fetch("/api/state")
+      .then((r) => r.json())
+      .then(renderPublic)
+      .catch(() => {});
+  }
+
+  initClient();
 </script>
 </body>
 </html>
