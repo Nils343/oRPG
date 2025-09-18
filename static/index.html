@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LAN RPG</title>
+<style>
+  :root { --bg:#0f1117; --card:#161a22; --muted:#8b93a7; --fg:#e6e9ef; --accent:#7aa2f7; --accent2:#89dceb; --bad:#f7768e; --ok:#9ece6a; --warn:#e0af68; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif; background: var(--bg); color: var(--fg); }
+  header { display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; border-bottom:1px solid #222736; position: sticky; top:0; background: rgba(15,17,23,0.9); backdrop-filter: blur(6px); }
+  header h1 { margin:0; font-size: 18px; letter-spacing:.5px; }
+  button, select, input, textarea { background: var(--card); color: var(--fg); border:1px solid #262c3a; border-radius:8px; padding:8px 10px; }
+  button { cursor:pointer; }
+  button[disabled] { opacity:.5; cursor:not-allowed; }
+  .wrap { display:flex; gap:16px; padding:16px; }
+  .col { display:flex; flex-direction:column; gap:16px; flex:1; min-width:280px; }
+  .card { background: var(--card); border:1px solid #262c3a; border-radius:12px; padding:14px; }
+  .muted { color: var(--muted); }
+  .row { display:flex; gap:10px; align-items:center; }
+  .right { margin-left:auto; }
+  #joinView input, #joinView textarea { width:100%; }
+  #scenario { white-space:pre-wrap; line-height:1.4; }
+  #players li { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed #222736; }
+  #players li:last-child { border-bottom: none; }
+  .pill { padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #2a3142; }
+  .good { color: var(--ok); border-color: var(--ok); }
+  .warn { color: var(--warn); border-color: var(--warn); }
+  .bad { color: var(--bad); border-color: var(--bad); }
+  .stack { display:flex; flex-direction:column; gap:8px; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  img#scene { width:100%; border-radius:10px; border:1px solid #262c3a; }
+  /* Modal */
+  .modalBack { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
+  .modal { width:min(720px, 92vw); background: var(--card); border:1px solid #2a3142; border-radius:12px; padding:16px; }
+  .modal h3 { margin-top:0; }
+  .tip { font-size: 12px; color: var(--muted); }
+  .tooltip { border-bottom:1px dashed var(--muted); cursor:help; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LAN RPG</h1>
+  <div class="row">
+    <span id="lockBanner" class="muted"></span>
+    <button id="btnSettings">Settings</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Join screen -->
+  <section id="joinView" class="col">
+    <div class="card">
+      <h3>Join the world</h3>
+      <div class="stack">
+        <label>Name
+          <input id="name" placeholder="Hephaest" value="Hephaest" />
+        </label>
+        <label>Short background (2–3 sentences)
+          <textarea id="background" rows="3" placeholder="Wizard">Wizard</textarea>
+        </label>
+        <button id="btnEnter">Enter World</button>
+        <p class="tip">If a scenario already exists, you will join next turn. All players will be notified.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Game screen -->
+  <section id="gameView" class="col" style="display:none">
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="muted">World style</div>
+          <div id="worldStyle"></div>
+        </div>
+        <div style="margin-left:24px">
+          <div class="muted">Difficulty</div>
+          <div id="worldDiff"></div>
+        </div>
+        <div class="right muted">Turn <span id="turnIdx">0</span></div>
+      </div>
+      <h3>Scenario</h3>
+      <div id="scenario" class="muted">Waiting…</div>
+    </div>
+
+    <div class="card">
+      <h3>Actions</h3>
+      <div class="stack">
+        <textarea id="action" rows="3" placeholder="What do you attempt to do?"></textarea>
+        <div class="row">
+          <button id="btnSubmit">Submit</button>
+          <button id="btnNextTurn">Next turn</button>
+          <button id="btnCreateImage">Create Image</button>
+        </div>
+        <div>
+          <h4 class="muted">This turn's submissions</h4>
+          <ul id="submissions" class="stack" style="margin:0; padding-left:18px"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sidebar -->
+  <aside id="side" class="col" style="display:none">
+    <div class="card">
+      <h3>Players</h3>
+      <ul id="players" style="list-style:none; padding:0; margin:0"></ul>
+    </div>
+    <div class="card">
+      <h3>Your character</h3>
+      <div id="you" class="stack">
+        <div><span class="muted">Name</span><div id="youName">—</div></div>
+        <div><span class="muted">Class</span><div id="youClass">—</div></div>
+        <div class="grid2">
+          <div>
+            <div class="muted">Abilities</div>
+            <ul id="youAbilities" style="margin:0; padding-left:18px"></ul>
+          </div>
+          <div>
+            <div class="muted">Inventory</div>
+            <ul id="youInv" style="margin:0; padding-left:18px"></ul>
+          </div>
+        </div>
+        <div>
+          <div class="muted">Conditions</div>
+          <ul id="youCond" style="margin:0; padding-left:18px"></ul>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Scene image</h3>
+      <img id="scene" alt="No image yet" title="" />
+      <div class="tip">Hover the image to see the prompt.</div>
+    </div>
+  </aside>
+</main>
+
+<!-- Settings modal -->
+<div id="settingsBack" class="modalBack">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div class="stack">
+      <div class="grid2">
+        <label>World style
+          <select id="setWorld">
+            <option>High fantasy</option>
+            <option>Low fantasy</option>
+            <option>Science fantasy</option>
+            <option>Science fiction</option>
+            <option>Dieselpunk</option>
+            <option>Cyberpunk</option>
+            <option>Steampunk</option>
+            <option>Post-apocalyptic</option>
+            <option>Modern occult</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select id="setDiff">
+            <option>Trivial</option>
+            <option>Easy</option>
+            <option selected>Normal</option>
+            <option>Hard</option>
+            <option>Impossible</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid2">
+        <label>Text model <span class="tip">(fetched live; no fallbacks)</span>
+          <select id="setTextModel"></select>
+        </label>
+        <label>Image model
+          <select id="setImageModel"></select>
+        </label>
+      </div>
+      <label>Gemini API key
+        <input id="setKey" type="password" placeholder="Paste your key…" />
+        <div class="tip">Stored in plaintext in settings.json on the server (like a .env). Use a dedicated key.</div>
+      </label>
+      <div class="row">
+        <button id="btnSaveSettings">Save</button>
+        <button id="btnCloseSettings" class="right">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const state = { playerId: null, lock: {active:false, reason:""} };
+
+  // UI helpers
+  function setLockBanner(lock) {
+    const banner = $("lockBanner");
+    const buttons = [$("btnSubmit"), $("btnNextTurn"), $("btnCreateImage"), $("btnEnter")].filter(Boolean);
+    state.lock = lock || {active:false, reason:""};
+    if (lock.active) {
+      const why = lock.reason === "resolving_turn" ? "Resolving turn…" : (lock.reason === "generating_image" ? "Generating image…" : "Busy…");
+      banner.textContent = why;
+      buttons.forEach(b => {
+        b.setAttribute("disabled", "true");
+        b.title = (lock.reason === "resolving_turn")
+          ? "Disabled while the turn is being resolved."
+          : "Disabled while image generation is in progress.";
+      });
+    } else {
+      banner.textContent = "";
+      buttons.forEach(b => { b.removeAttribute("disabled"); b.title=""; });
+    }
+  }
+
+  function pillClass(word) {
+    if (!word) return "pill";
+    if (["healthy","sturdy","fit","fine"].includes(word)) return "pill good";
+    if (["wounded","soaked","tired","cursed","hungry","exhausted"].includes(word)) return "pill warn";
+    if (["dead","poisoned","broken"].includes(word)) return "pill bad";
+    return "pill";
+    }
+
+  // Populate settings modal
+  async function openSettings() {
+    const s = await (await fetch("/api/settings")).json();
+    $("setWorld").value = s.world_style || "High fantasy";
+    $("setDiff").value = s.difficulty || "Normal";
+    // Fetch models first, then set selection
+    try {
+      const models = await (await fetch("/api/models")).json();
+      const textSel = $("setTextModel");
+      textSel.innerHTML = "";
+      (models.models || []).forEach(m => {
+        // Offer only generateContent-capable models for text
+        const supported = (m.supported || []).map(x => (""+x).toLowerCase());
+        if (supported.includes("generatecontent") || supported.includes("generateContent")) {
+          const opt = document.createElement("option");
+          opt.value = m.name.replace(/^models\//,"");
+          opt.textContent = `${m.displayName || m.name}`;
+          textSel.appendChild(opt);
+        }
+      });
+      if (s.text_model) textSel.value = s.text_model;
+
+      const imgSel = $("setImageModel");
+      imgSel.innerHTML = "";
+      // From live list, prefer the official image-preview model
+      (models.models || []).forEach(m => {
+        const nm = m.name.replace(/^models\//,"");
+        if (nm.includes("flash-image")) {
+          const opt = document.createElement("option");
+          opt.value = nm;
+          opt.textContent = m.displayName || nm;
+          imgSel.appendChild(opt);
+        }
+      });
+      // Fallback UI case: if not present in the account/region, show none (per requirement: no fallback hardcoding)
+      if (s.image_model) {
+        const exists = [...imgSel.options].some(o => o.value === s.image_model);
+        if (exists) imgSel.value = s.image_model;
+      }
+    } catch (e) {
+      alert("Failed to fetch models. Ensure your API key is saved first in Settings.");
+    }
+
+    // API key handling (we never re-show the secret; user can paste again)
+    $("setKey").value = "";
+    $("settingsBack").style.display = "flex";
+  }
+  $("btnSettings").onclick = openSettings;
+  $("btnCloseSettings").onclick = () => $("settingsBack").style.display = "none";
+  $("btnSaveSettings").onclick = async () => {
+    const body = {
+      world_style: $("setWorld").value,
+      difficulty: $("setDiff").value,
+      text_model: $("setTextModel").value,
+      image_model: $("setImageModel").value,
+    };
+    const keyVal = $("setKey").value.trim();
+    if (keyVal) body.api_key = keyVal;
+    const r = await fetch("/api/settings", {method:"PUT", headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if (!r.ok) { alert("Failed to save settings."); return; }
+    $("settingsBack").style.display = "none";
+  };
+
+  // Join
+  $("btnEnter").onclick = async () => {
+    const body = { name: $("name").value || "Hephaest", background: $("background").value || "Wizard" };
+    const r = await fetch("/api/join", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if (!r.ok) {
+      const t = await r.text(); alert("Join failed: " + t); return;
+    }
+    const { player_id } = await r.json();
+    state.playerId = player_id;
+    // Switch UI
+    $("joinView").style.display = "none";
+    $("gameView").style.display = "";
+    $("side").style.display = "";
+    connectWS();
+  };
+
+  // Actions
+  $("btnSubmit").onclick = async () => {
+    if (!state.playerId) return;
+    const txt = $("action").value.trim();
+    if (!txt) return;
+    const r = await fetch("/api/submit", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({player_id: state.playerId, text: txt})});
+    if (!r.ok) alert("Submit failed.");
+    else $("action").value = "";
+  };
+  $("btnNextTurn").onclick = async () => {
+    if (!state.playerId) return;
+    const r = await fetch("/api/next_turn", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({player_id: state.playerId})});
+    if (!r.ok) {
+      const t = await r.text(); alert("Next turn failed: " + t);
+    }
+  };
+  $("btnCreateImage").onclick = async () => {
+    if (!state.playerId) return;
+    const r = await fetch("/api/create_image", {method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({player_id: state.playerId})});
+    if (!r.ok) {
+      const t = await r.text(); alert("Create Image failed: " + t);
+    }
+  };
+
+  // WebSocket
+  let ws;
+  function connectWS() {
+    const url = new URL(location.origin.replace(/^http/,"ws") + "/ws");
+    if (state.playerId) url.searchParams.set("player_id", state.playerId);
+    ws = new WebSocket(url);
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.event === "state") renderPublic(msg.data);
+      else if (msg.event === "private") renderPrivate(msg.data);
+      else if (msg.event === "announce") console.log(msg.data.message);
+    };
+    ws.onclose = () => {
+      // Try reconnecting silently after a delay
+      setTimeout(connectWS, 2000);
+    };
+  }
+  // Connect as spectator initially (before join), so you can see current scenario/submissions
+  connectWS();
+
+  // Renderers
+  function renderPublic(s) {
+    $("turnIdx").textContent = s.turn_index ?? 0;
+    $("worldStyle").textContent = s.world_style || "—";
+    $("worldDiff").textContent = s.difficulty || "—";
+    $("scenario").textContent = s.current_scenario || "—";
+    setLockBanner(s.lock || {active:false});
+
+    const ul = $("submissions");
+    ul.innerHTML = "";
+    (s.submissions || []).forEach(item => {
+      const li = document.createElement("li");
+      li.textContent = `${item.name}: ${item.text}`;
+      ul.appendChild(li);
+    });
+
+    const pl = $("players");
+    pl.innerHTML = "";
+    (s.players || []).forEach(p => {
+      const li = document.createElement("li");
+      const name = document.createElement("div");
+      name.textContent = p.name + (p.pending_join ? " (joining soon)" : "");
+      const status = document.createElement("div");
+      status.textContent = p.status_word || "—";
+      status.className = pillClass(p.status_word);
+      li.appendChild(name); li.appendChild(status);
+      pl.appendChild(li);
+    });
+
+    const img = $("scene");
+    if (s.image && s.image.data_url) {
+      img.src = s.image.data_url;
+      img.title = s.image.prompt || "";
+    }
+
+    // Enable game view for spectators when a scenario exists
+    if ($("gameView").style.display === 'none' && s.current_scenario) {
+      $("gameView").style.display = "";
+      $("side").style.display = "";
+    }
+  }
+
+  function renderPrivate(data) {
+    const y = data.you || {};
+    $("youName").textContent = y.name || "—";
+    $("youClass").textContent = y.class || "—";
+    const abl = $("youAbilities"); abl.innerHTML = "";
+    (y.abilities || []).forEach(a => {
+      const li = document.createElement("li");
+      li.textContent = `${a.n} (${a.x})`;
+      abl.appendChild(li);
+    });
+    const inv = $("youInv"); inv.innerHTML = "";
+    (y.inventory || []).forEach(i => {
+      const li = document.createElement("li"); li.textContent = i; inv.appendChild(li);
+    });
+    const cond = $("youCond"); cond.innerHTML = "";
+    (y.conditions || []).forEach(c => {
+      const li = document.createElement("li"); li.textContent = c; cond.appendChild(li);
+    });
+  }
+
+  // Initial public state for spectators
+  fetch("/api/state").then(r => r.json()).then(renderPublic);
+</script>
+</body>
+</html>

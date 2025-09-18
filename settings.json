@@ -1,0 +1,7 @@
+{
+  "api_key": "AIzaSyBBP9va7xLimGHVbJnNz2P2-Euq4rVWciM",
+  "text_model": "gemini-2.5-flash-lite",
+  "image_model": "gemini-2.5-flash-image-preview",
+  "world_style": "High fantasy",
+  "difficulty": "Normal"
+}
