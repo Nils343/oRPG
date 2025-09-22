@@ -708,6 +708,15 @@ class SettingsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rpg.STATE.settings["narration_model"], "eleven_flash_v2_1")
         save_mock.assert_awaited_once_with(rpg.STATE.settings)
 
+    async def test_update_settings_sets_openai_key(self):
+        body = rpg.SettingsUpdate(openai_api_key="sk-openai-test")
+        with mock.patch("rpg.save_settings", new=mock.AsyncMock()) as save_mock:
+            result = await rpg.update_settings(body)
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(rpg.STATE.settings["openai_api_key"], "sk-openai-test")
+        save_mock.assert_awaited_once_with(rpg.STATE.settings)
+
     async def test_update_settings_ignores_blank_narration_model(self):
         rpg.STATE.settings["narration_model"] = "eleven_flash_v2_5"
         body = rpg.SettingsUpdate(narration_model="   ")
@@ -833,6 +842,40 @@ class ModelsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entry["provider"], rpg.TEXT_PROVIDER_GROK)
         self.assertEqual(entry["name"], "grok-4")
 
+    async def test_api_models_returns_openai_models_when_configured(self):
+        async def fake_openai_list_models(api_key):
+            self.assertEqual(api_key, "openai-secret")
+            return [
+                {
+                    "id": "gpt-4o-mini",
+                    "display_name": "GPT-4o Mini",
+                    "capabilities": {
+                        "responses": True,
+                        "chat_completions": True,
+                    },
+                }
+            ]
+
+        reset_state()
+        rpg.STATE.settings["api_key"] = ""
+        rpg.STATE.settings["openai_api_key"] = "openai-secret"
+
+        original_gemini = rpg.gemini_list_models
+        original_openai = rpg.openai_list_models
+        rpg.gemini_list_models = mock.AsyncMock(side_effect=AssertionError("gemini_list_models should not be called"))
+        rpg.openai_list_models = fake_openai_list_models
+        try:
+            result = await rpg.api_models()
+        finally:
+            rpg.gemini_list_models = original_gemini
+            rpg.openai_list_models = original_openai
+
+        self.assertTrue(result["models"])  # at least one
+        entry = result["models"][0]
+        self.assertEqual(entry["provider"], rpg.TEXT_PROVIDER_OPENAI)
+        self.assertEqual(entry["name"], "gpt-4o-mini")
+        self.assertIn("responses", entry["supported"])
+
     async def test_api_models_sorted_by_display_name(self):
         async def fake_gemini_list_models():
             return [
@@ -886,6 +929,11 @@ class TextProviderDetectionTests(unittest.TestCase):
     def test_defaults_to_gemini_when_unspecified(self):
         self.assertEqual(rpg.detect_text_provider("gemini-2.5-flash"), rpg.TEXT_PROVIDER_GEMINI)
         self.assertEqual(rpg.detect_text_provider(""), rpg.TEXT_PROVIDER_GEMINI)
+
+    def test_detects_openai_models_by_pattern(self):
+        self.assertEqual(rpg.detect_text_provider("gpt-4o"), rpg.TEXT_PROVIDER_OPENAI)
+        self.assertEqual(rpg.detect_text_provider("openai/gpt-4.1"), rpg.TEXT_PROVIDER_OPENAI)
+        self.assertEqual(rpg.detect_text_provider("chatgpt-4o-latest"), rpg.TEXT_PROVIDER_OPENAI)
 
 
 class SanitizeNarrativeTests(unittest.TestCase):

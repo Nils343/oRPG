@@ -1,11 +1,11 @@
 # oRPG
 
-A LAN-friendly multiplayer tabletop RPG host built on FastAPI, WebSockets, and structured LLM calls. oRPG keeps a shared world state, lets players join from a browser, and can enrich every turn with auto-generated images, voice narration, and concise history summaries. It currently supports Google Gemini and xAI Grok text models plus optional ElevenLabs speech synthesis.
+A LAN-friendly multiplayer tabletop RPG host built on FastAPI, WebSockets, and structured LLM calls. oRPG keeps a shared world state, lets players join from a browser, and can enrich every turn with auto-generated images, voice narration, and concise history summaries. It currently supports Google Gemini, OpenAI, and xAI Grok text models plus optional ElevenLabs speech synthesis.
 
 ## Highlights
 - Real-time lobby and turn engine served from `static/index.html`; players join, submit actions, and watch turns resolve over WebSockets.
 - Structured JSON contracts keep characters, inventories, and public status words consistent across turns.
-- Dual text providers: drop in a Gemini or Grok model name and the server selects the right API key automatically.
+- Multi-provider text engine: drop in a Gemini, OpenAI, or Grok model name and the server selects the right API key automatically.
 - Optional scene art and portrait generation via Gemini image models, including auto-on-turn toggles and per-player portrait refresh.
 - ElevenLabs narration integration with automatic queuing, error reporting, and cost tracking for spoken turns.
 - English and German language modes with localized UI strings, GM prompt templates, and rules for the structured responses.
@@ -15,6 +15,7 @@ A LAN-friendly multiplayer tabletop RPG host built on FastAPI, WebSockets, and s
 ## Requirements
 - Python 3.11+ (the codebase relies on modern type hints and `asyncio` features).
 - A Google Gemini API key if you intend to use Gemini text or image models.
+- An OpenAI API key if you want to call GPT-4o, GPT-4.1, o1, or other OpenAI text models.
 - An xAI Grok API key if you prefer Grok models for structured text.
 - An ElevenLabs API key if you want automatic narration (optional).
 
@@ -34,8 +35,9 @@ On first launch the server will create `settings.json` with sane defaults. Popul
 | --- | ------- |
 | `api_key` | Google Gemini API key used for Gemini text/image calls. |
 | `grok_api_key` | xAI Grok API key; required when `text_model` targets Grok. |
+| `openai_api_key` | OpenAI API key; required when `text_model` targets OpenAI models such as `gpt-4o`. |
 | `elevenlabs_api_key` | ElevenLabs key for narration; required before enabling auto-TTS. |
-| `text_model` | Structured text model (e.g. `gemini-2.0-flash`, `grok-4-fast-non-reasoning`). Provider is auto-detected. |
+| `text_model` | Structured text model (e.g. `gemini-2.0-flash`, `gpt-4o-mini`, `grok-4-fast-non-reasoning`). Provider is auto-detected. |
 | `image_model` | Gemini image model for scene and portrait generation. |
 | `narration_model` | ElevenLabs model/voice to narrate turns. |
 | `world_style` | Flavour string shown in the UI and injected into prompts. |

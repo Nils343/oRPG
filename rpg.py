@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 APP_DIR = Path(__file__).parent
+RESOURCES_DIR = APP_DIR / "resources"
 SETTINGS_FILE = APP_DIR / "settings.json"
 PROMPT_FILE = APP_DIR / "gm_prompt.txt"
 PROMPT_FILES = {
@@ -288,6 +289,7 @@ GM_PROMPT_TEMPLATE = load_gm_prompt()
 DEFAULT_SETTINGS = {
     "api_key": "",
     "grok_api_key": "",
+    "openai_api_key": "",
     "elevenlabs_api_key": "",
     "text_model": "grok-4-fast-non-reasoning",
     "image_model": "gemini-2.5-flash-image-preview",
@@ -623,6 +625,7 @@ def record_image_usage(model: Optional[str], *, purpose: str, tier: str = "stand
 # -------- Text model providers --------
 TEXT_PROVIDER_GEMINI = "gemini"
 TEXT_PROVIDER_GROK = "grok"
+TEXT_PROVIDER_OPENAI = "openai"
 
 
 def detect_text_provider(model: Optional[str]) -> str:
@@ -631,8 +634,34 @@ def detect_text_provider(model: Optional[str]) -> str:
         return TEXT_PROVIDER_GEMINI
     if value.startswith("models/"):
         value = value.split("/", 1)[1]
+    if value.startswith("openai/"):
+        value = value.split("/", 1)[1]
     if value.startswith("grok-") or value.startswith("xai-") or "grok" in value:
         return TEXT_PROVIDER_GROK
+    openai_markers = (
+        "gpt-",
+        "gpt4",
+        "gpt-4",
+        "chatgpt",
+        "omni-",
+        "omni.",
+        "o1-",
+        "o3-",
+        "o1.",
+        "o3.",
+        "text-davinci",
+        "text-curie",
+        "text-babbage",
+        "text-ada",
+        "davinci-",
+        "curie-",
+        "babbage-",
+        "ada-",
+    )
+    if any(marker in value for marker in openai_markers):
+        return TEXT_PROVIDER_OPENAI
+    if "openai" in value:
+        return TEXT_PROVIDER_OPENAI
     return TEXT_PROVIDER_GEMINI
 
 
@@ -641,6 +670,11 @@ def require_text_api_key(provider: str) -> str:
         api_key = (STATE.settings.get("grok_api_key") or "").strip()
         if not api_key:
             raise HTTPException(status_code=400, detail="Grok API key is not set in settings.")
+        return api_key
+    if provider == TEXT_PROVIDER_OPENAI:
+        api_key = (STATE.settings.get("openai_api_key") or "").strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="OpenAI API key is not set in settings.")
         return api_key
     api_key = (STATE.settings.get("api_key") or "").strip()
     if not api_key:
@@ -672,7 +706,21 @@ def _convert_schema_for_jsonschema(schema: Dict[str, Any]) -> Dict[str, Any]:
             return [_convert(item) for item in value]
         return value
 
-    return _convert(copy.deepcopy(schema))
+    converted = _convert(copy.deepcopy(schema))
+
+    def _ensure_additional_props(node: Any) -> None:
+        if isinstance(node, dict):
+            node_type = node.get("type")
+            if node_type == "object" and "additionalProperties" not in node:
+                node["additionalProperties"] = False
+            for child in node.values():
+                _ensure_additional_props(child)
+        elif isinstance(node, list):
+            for item in node:
+                _ensure_additional_props(item)
+
+    _ensure_additional_props(converted)
+    return converted
 
 
 # -------- Gemini endpoints (REST) --------
@@ -683,6 +731,10 @@ GENERATE_CONTENT_URL = f"{GEMINI_BASE}/models/{{model}}:generateContent"
 GROK_BASE = "https://api.x.ai/v1"
 GROK_MODELS_URL = f"{GROK_BASE}/models"
 GROK_CHAT_COMPLETIONS_URL = f"{GROK_BASE}/chat/completions"
+
+OPENAI_BASE = "https://api.openai.com/v1"
+OPENAI_MODELS_URL = f"{OPENAI_BASE}/models"
+OPENAI_RESPONSES_URL = f"{OPENAI_BASE}/responses"
 
 
 # -------------------- Data models (server state) --------------------
@@ -1202,11 +1254,13 @@ async def save_settings(new_settings: Dict):
         "elevenlabs_api_key_set",
         "grok_api_key_preview",
         "grok_api_key_set",
+        "openai_api_key_preview",
+        "openai_api_key_set",
     }
     sanitized = {k: v for k, v in new_settings.items() if k not in transient_keys}
 
     # Preserve existing secrets when callers provide empty placeholders.
-    for secret_key in ("api_key", "grok_api_key", "elevenlabs_api_key"):
+    for secret_key in ("api_key", "grok_api_key", "openai_api_key", "elevenlabs_api_key"):
         if secret_key not in sanitized:
             continue
         raw_value = sanitized[secret_key]
@@ -1798,6 +1852,25 @@ async def grok_list_models(api_key: str) -> List[Dict]:
     return []
 
 
+async def openai_list_models(api_key: str) -> List[Dict]:
+    headers = {"Authorization": f"Bearer {api_key}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(OPENAI_MODELS_URL, headers=headers)
+    if r.status_code != 200:
+        detail_text = r.text or f"HTTP {r.status_code}"
+        raise HTTPException(status_code=502, detail=f"OpenAI model list failed: {detail_text}")
+    try:
+        data = r.json()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Malformed OpenAI model list: {exc}") from exc
+
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        return data["data"]
+    if isinstance(data, list):
+        return data
+    return []
+
+
 def _sanitize_request_headers(headers: Dict[str, str]) -> Dict[str, str]:
     sanitized: Dict[str, str] = {}
     for key, value in headers.items():
@@ -2076,6 +2149,301 @@ async def _grok_generate_structured(
         raise HTTPException(status_code=502, detail="Malformed response from model.")
 
     usage_meta = response_json.get("usage") or {}
+    prompt_tokens = usage_meta.get("prompt_tokens")
+    completion_tokens = usage_meta.get("completion_tokens")
+    reasoning_tokens = None
+
+    def _coerce_int(value: Any) -> Optional[int]:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str) and value.strip().isdigit():
+            try:
+                return int(value.strip())
+            except ValueError:
+                return None
+        return None
+
+    prompt_tokens = _coerce_int(prompt_tokens)
+    completion_tokens = _coerce_int(completion_tokens)
+
+    completion_details = usage_meta.get("completion_tokens_details")
+    if isinstance(completion_details, dict):
+        for key in ("reasoning_tokens", "reasoning", "thinking_tokens"):
+            candidate = _coerce_int(completion_details.get(key))
+            if candidate is not None:
+                reasoning_tokens = candidate
+                break
+
+    if record_usage:
+        STATE.last_token_usage = {
+            "input": prompt_tokens,
+            "output": completion_tokens,
+            "thinking": reasoning_tokens,
+        }
+        for key in ("input", "output", "thinking"):
+            val = STATE.last_token_usage.get(key)
+            if isinstance(val, int) and val >= 0:
+                STATE.session_token_usage[key] = STATE.session_token_usage.get(key, 0) + val
+        STATE.session_request_count += 1
+
+        combined_output_tokens = 0
+        for val in (completion_tokens, reasoning_tokens):
+            if isinstance(val, int) and val > 0:
+                combined_output_tokens += val
+        cost_info = calculate_turn_cost(model, prompt_tokens, combined_output_tokens or None)
+        if cost_info is not None:
+            total_cost = cost_info.get("total_usd")
+            STATE.last_cost_usd = float(total_cost) if isinstance(total_cost, (int, float)) else None
+            if isinstance(STATE.last_cost_usd, float):
+                STATE.session_cost_usd += STATE.last_cost_usd
+        else:
+            STATE.last_cost_usd = None
+
+    choices = response_json.get("choices") or []
+    if not choices:
+        raise HTTPException(status_code=502, detail="Malformed response from model.")
+
+    first_choice = choices[0] if isinstance(choices, list) else None
+    if not isinstance(first_choice, dict):
+        raise HTTPException(status_code=502, detail="Malformed response from model.")
+
+    message = first_choice.get("message") if isinstance(first_choice.get("message"), dict) else first_choice.get("message")
+    content = None
+    if isinstance(message, dict):
+        content = message.get("content")
+    elif isinstance(first_choice.get("content"), (str, list)):
+        content = first_choice.get("content")
+
+    if isinstance(content, list):
+        fragments: List[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                text_val = part.get("text") or part.get("value")
+                if isinstance(text_val, str):
+                    fragments.append(text_val)
+            elif isinstance(part, str):
+                fragments.append(part)
+        content_text = "".join(fragments)
+    elif isinstance(content, str):
+        content_text = content
+    else:
+        content_text = ""
+
+    content_text = content_text.strip()
+    if not content_text:
+        raise HTTPException(status_code=502, detail="Empty response from model.")
+
+    def _clean_json_text(text: str) -> str:
+        cleaned = text.strip()
+        if cleaned.startswith("```") and cleaned.endswith("```"):
+            cleaned = cleaned.strip("`\n")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].lstrip()
+        return cleaned
+
+    try:
+        parsed = json.loads(content_text)
+    except Exception:
+        try:
+            parsed = json.loads(_clean_json_text(content_text))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"Malformed response from model: {exc}") from exc
+
+    return parsed
+
+def _normalize_openai_model_name(model: str) -> str:
+    normalized = (model or "").strip().lower()
+    if normalized.startswith("openai/"):
+        normalized = normalized.split("/", 1)[1]
+    return normalized
+
+
+def _openai_requires_reasoning_header(model: str) -> bool:
+    normalized = _normalize_openai_model_name(model)
+    prefixes = ("o1", "o3", "o4")
+    if any(normalized.startswith(prefix) for prefix in prefixes):
+        return True
+    if "gpt-4.1" in normalized or normalized.startswith("gpt4.1"):
+        return True
+    return False
+
+
+def _openai_supports_temperature(model: str) -> bool:
+    normalized = _normalize_openai_model_name(model)
+    if normalized.startswith("gpt-5"):
+        return False
+    return True
+
+
+def _openai_reasoning_for_mode(model: str, mode: str) -> Optional[Dict[str, str]]:
+    normalized = _normalize_openai_model_name(model)
+    if not (normalized.startswith("gpt-5") or normalized.startswith("o1") or normalized.startswith("o3")):
+        return None
+    effort_map = {
+        "none": "minimal",
+        "brief": "low",
+        "balanced": "medium",
+        "deep": "high",
+    }
+    effort = effort_map.get(mode)
+    if not effort:
+        return None
+    return {"effort": effort}
+
+
+async def _openai_generate_structured(
+    *,
+    model: str,
+    system_prompt: str,
+    user_payload: Dict,
+    schema: Dict,
+    temperature: Optional[float] = None,
+    record_usage: bool = True,
+    include_thinking_budget: bool = True,  # ignored for OpenAI but kept for signature parity
+    dev_snapshot: str = "generic",
+    schema_name: str = "payload",
+) -> Dict:
+    api_key = require_text_api_key(TEXT_PROVIDER_OPENAI)
+    url = OPENAI_RESPONSES_URL
+    mode = (STATE.settings.get("thinking_mode") or "none").lower()
+    if mode not in THINKING_MODES:
+        mode = "none"
+
+    effective_temperature = temperature
+    if effective_temperature is None:
+        effective_temperature = {
+            "none": 0.6,
+            "brief": 0.75,
+            "balanced": 0.9,
+            "deep": 1.0,
+        }.get(mode, 0.9)
+
+    json_schema = _convert_schema_for_jsonschema(schema) if schema else None
+    if json_schema and isinstance(json_schema, dict) and json_schema.get("type"):
+        response_format: Dict[str, Any] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name or "payload",
+                "schema": json_schema,
+            },
+        }
+    else:
+        response_format = {"type": "json_object"}
+
+    system_prompt_augmented = system_prompt.rstrip() + (
+        "\n\nRespond strictly with a single JSON object matching the schema. "
+        "Do not include markdown or any explanatory text."
+    )
+    payload_text = json.dumps(user_payload, ensure_ascii=False)
+
+    body: Dict[str, Any] = {
+        "model": model,
+        "input": [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": system_prompt_augmented}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "Use the following JSON input to determine the response. "
+                            "Echo nothing from it except as needed in the output.\n" + payload_text
+                        ),
+                    }
+                ],
+            },
+        ],
+    }
+    if effective_temperature is not None and _openai_supports_temperature(model):
+        body["temperature"] = effective_temperature
+    reasoning_cfg = None
+    if include_thinking_budget:
+        reasoning_cfg = _openai_reasoning_for_mode(model, mode)
+    if reasoning_cfg:
+        body["reasoning"] = reasoning_cfg
+    if response_format.get("type") == "json_schema":
+        json_schema_cfg = response_format.get("json_schema")
+        text_format: Dict[str, Any] = {"type": "json_schema"}
+        if isinstance(json_schema_cfg, dict):
+            text_format.update(json_schema_cfg)
+        else:
+            text_format.update({
+                "name": schema_name or "payload",
+                "schema": json_schema or {},
+            })
+    else:
+        text_format = response_format
+
+    body["text"] = {"format": text_format}
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    if _openai_requires_reasoning_header(model):
+        headers["OpenAI-Beta"] = "reasoning"
+
+    request_snapshot = {
+        "timestamp": time.time(),
+        "url": url,
+        "model": model,
+        "provider": TEXT_PROVIDER_OPENAI,
+        "thinking_mode": mode,
+        "temperature": effective_temperature,
+        "record_usage": record_usage,
+        "headers": _sanitize_request_headers(headers),
+        "body": body,
+    }
+    STATE.last_text_request = request_snapshot
+    if dev_snapshot == "scenario":
+        STATE.last_scenario_request = copy.deepcopy(request_snapshot)
+
+    start_time = time.perf_counter()
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(url, headers=headers, json=body)
+    elapsed = time.perf_counter() - start_time
+    if record_usage:
+        STATE.last_turn_runtime = elapsed
+
+    raw_text = getattr(r, "text", "")
+    if callable(raw_text):
+        try:
+            raw_text = raw_text()
+        except Exception:
+            raw_text = ""
+    if raw_text is None:
+        raw_text = ""
+    try:
+        response_json = r.json()
+    except Exception:
+        response_json = None
+
+    headers_source = getattr(r, "headers", {}) or {}
+    header_items = headers_source.items() if hasattr(headers_source, "items") else []
+    response_headers = {str(k): str(v) for k, v in header_items}
+    response_snapshot = {
+        "timestamp": time.time(),
+        "status_code": r.status_code,
+        "elapsed_seconds": elapsed,
+        "headers": response_headers,
+        "json": response_json,
+        "text": raw_text,
+        "provider": TEXT_PROVIDER_OPENAI,
+    }
+    STATE.last_text_response = response_snapshot
+    if dev_snapshot == "scenario":
+        STATE.last_scenario_response = copy.deepcopy(response_snapshot)
+
+    if r.status_code != 200:
+        detail = raw_text or "Text generation failed."
+        raise HTTPException(status_code=502, detail=detail)
+
+    if not isinstance(response_json, dict):
+        raise HTTPException(status_code=502, detail="Malformed response from model.")
+
+    usage_meta = response_json.get("usage") or {}
     if record_usage:
         reasoning_tokens = (
             usage_meta.get("reasoning_tokens")
@@ -2083,7 +2451,7 @@ async def _grok_generate_structured(
             or usage_meta.get("reasoning_tokens_used")
         )
         if not isinstance(reasoning_tokens, int):
-            details = usage_meta.get("completion_tokens_details")
+            details = usage_meta.get("output_tokens_details")
             if isinstance(details, dict):
                 for key in ("reasoning_tokens", "reasoning", "thinking_tokens"):
                     value = details.get(key)
@@ -2091,8 +2459,8 @@ async def _grok_generate_structured(
                         reasoning_tokens = value
                         break
         STATE.last_token_usage = {
-            "input": usage_meta.get("prompt_tokens"),
-            "output": usage_meta.get("completion_tokens"),
+            "input": usage_meta.get("input_tokens"),
+            "output": usage_meta.get("output_tokens"),
             "thinking": reasoning_tokens if isinstance(reasoning_tokens, int) else None,
         }
         for key in ("input", "output", "thinking"):
@@ -2116,31 +2484,47 @@ async def _grok_generate_structured(
         else:
             STATE.last_cost_usd = None
 
-    choices = response_json.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise HTTPException(status_code=502, detail="No choices returned by model.")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
+    output_entries: List[Any] = []
+    raw_output = response_json.get("output")
+    if isinstance(raw_output, list):
+        output_entries = raw_output
+    elif isinstance(raw_output, dict):
+        output_entries = [raw_output]
+    elif isinstance(response_json.get("data"), list):
+        output_entries = response_json["data"]
 
-    if isinstance(content, list):
-        text_parts: List[str] = []
-        for item in content:
-            if isinstance(item, dict):
-                if "text" in item and item["text"]:
-                    text_parts.append(str(item["text"]))
-                elif "value" in item and item["value"]:
-                    text_parts.append(str(item["value"]))
-        assembled = "".join(text_parts)
-    else:
-        assembled = str(content or "")
+    text_parts: List[str] = []
 
+    def _collect_text(entry: Any):
+        if isinstance(entry, dict):
+            entry_type = entry.get("type")
+            if entry_type == "message":
+                for content in entry.get("content") or []:
+                    _collect_text(content)
+            elif entry_type in {"output_text", "text"}:
+                text_val = entry.get("text") or entry.get("value")
+                if text_val:
+                    text_parts.append(str(text_val))
+            elif "text" in entry and isinstance(entry.get("text"), str):
+                text_parts.append(str(entry["text"]))
+        elif isinstance(entry, str):
+            text_parts.append(entry)
+
+    for entry in output_entries:
+        _collect_text(entry)
+
+    if not text_parts:
+        fallback_text = response_json.get("output_text") or response_json.get("text")
+        if isinstance(fallback_text, str) and fallback_text.strip():
+            text_parts.append(fallback_text)
+
+    assembled = "".join(text_parts)
     if not assembled.strip():
         raise HTTPException(status_code=502, detail="Empty response from model.")
 
     try:
         parsed = json.loads(assembled)
     except Exception:
-        # Some providers wrap JSON in code fences; attempt to strip common patterns.
         cleaned = assembled.strip()
         if cleaned.startswith("```") and cleaned.endswith("```"):
             cleaned = cleaned.strip("`\n")
@@ -2168,6 +2552,18 @@ async def _generate_structured(
     provider = detect_text_provider(model)
     if provider == TEXT_PROVIDER_GROK:
         return await _grok_generate_structured(
+            model=model,
+            system_prompt=system_prompt,
+            user_payload=user_payload,
+            schema=schema,
+            temperature=temperature,
+            record_usage=record_usage,
+            include_thinking_budget=include_thinking_budget,
+            dev_snapshot=dev_snapshot,
+            schema_name=schema_name,
+        )
+    if provider == TEXT_PROVIDER_OPENAI:
+        return await _openai_generate_structured(
             model=model,
             system_prompt=system_prompt,
             user_payload=user_payload,
@@ -2770,6 +3166,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Nils' RPG", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
+if RESOURCES_DIR.exists():
+    app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resources")
 
 
 # --------- Static root ---------
@@ -2845,6 +3243,7 @@ async def get_dev_text_inspect():
 class SettingsUpdate(BaseModel):
     api_key: Optional[str] = None
     grok_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
     elevenlabs_api_key: Optional[str] = None
     world_style: Optional[str] = None
     difficulty: Optional[str] = None
@@ -2891,6 +3290,9 @@ async def update_settings(body: SettingsUpdate):
         changed = True
     if body.grok_api_key is not None:
         STATE.settings["grok_api_key"] = body.grok_api_key.strip()
+        changed = True
+    if body.openai_api_key is not None:
+        STATE.settings["openai_api_key"] = body.openai_api_key.strip()
         changed = True
     if body.elevenlabs_api_key is not None:
         STATE.settings["elevenlabs_api_key"] = body.elevenlabs_api_key.strip()
@@ -2974,6 +3376,55 @@ async def api_models():
                         "displayName": str(display),
                         "supported": supported,
                         "provider": TEXT_PROVIDER_GROK,
+                    }
+                )
+
+    openai_key = (STATE.settings.get("openai_api_key") or "").strip()
+    if openai_key:
+        try:
+            openai_models = await openai_list_models(openai_key)
+        except HTTPException as exc:
+            errors.append(exc)
+        else:
+            for om in openai_models:
+                identifier = (
+                    om.get("id")
+                    or om.get("model")
+                    or om.get("name")
+                    or om.get("slug")
+                    or ""
+                )
+                identifier = str(identifier).strip()
+                if not identifier:
+                    continue
+                display = (
+                    om.get("display_name")
+                    or om.get("displayName")
+                    or om.get("description")
+                    or identifier
+                )
+                supported_raw = (
+                    om.get("capabilities")
+                    or om.get("modalities")
+                    or om.get("interfaces")
+                    or []
+                )
+                if isinstance(supported_raw, dict):
+                    supported = [str(k) for k, v in supported_raw.items() if v]
+                elif isinstance(supported_raw, (list, tuple)):
+                    supported = [str(x) for x in supported_raw]
+                elif supported_raw:
+                    supported = [str(supported_raw)]
+                else:
+                    supported = []
+                if not supported:
+                    supported = ["responses"]
+                items.append(
+                    {
+                        "name": identifier,
+                        "displayName": str(display),
+                        "supported": supported,
+                        "provider": TEXT_PROVIDER_OPENAI,
                     }
                 )
 

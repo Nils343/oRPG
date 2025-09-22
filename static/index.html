@@ -15,12 +15,15 @@
     box-shadow: none !important;
   }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif; min-height:100vh; background:
-    radial-gradient(circle at 18% 16%, rgba(137,220,235,0.18), transparent 60%),
-    radial-gradient(circle at 82% 8%, rgba(122,162,247,0.14), transparent 65%),
-    radial-gradient(circle at 50% 100%, rgba(158,206,106,0.1), transparent 70%),
-    var(--bg);
-    color: var(--fg); }
+  body { margin:0; font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif; min-height:100vh; background: var(--bg); color: var(--fg); }
+  body.join-screen {
+    background-color: var(--bg);
+    background-image: url("/resources/Character_Generation.png");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
   header { display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; border-bottom:1px solid #222736; position: sticky; top:0; background: rgba(15,17,23,0.9); backdrop-filter: blur(6px); }
   header h1 { margin:0; font-size: 18px; letter-spacing:.5px; }
   button, select, input, textarea { background: var(--card); color: var(--fg); border:1px solid #262c3a; border-radius:8px; padding:8px 10px; }
@@ -68,13 +71,12 @@
   .world-style-expander:hover, .world-style-expander:focus-visible { border-color:rgba(137,220,235,0.3); color:var(--accent2); outline:none; }
   .world-style-children { display:flex; flex-direction:column; gap:4px; margin-left:16px; }
   .world-style-children.hidden { display:none; }
-  .join-layout { flex:none; width: min(720px, 100%); margin:8vh auto 6vh; position:relative; }
-  .join-layout::before, .join-layout::after { content:""; position:absolute; border-radius:50%; filter:blur(0); z-index:-2; opacity:0.55; }
-  .join-layout::before { width:320px; height:320px; top:-140px; left:-120px; background:radial-gradient(circle, rgba(122,162,247,0.35), rgba(15,17,23,0.1)); }
-  .join-layout::after { width:260px; height:260px; right:-110px; bottom:-120px; background:radial-gradient(circle, rgba(137,220,235,0.35), rgba(15,17,23,0.1)); }
+  .join-layout { flex:none; width: min(720px, 100%); position:absolute; top:8vh; left:50%; transform:translateX(-50%); z-index:20; }
+  .join-layout.dragging { cursor:grabbing; }
   .join-card { position:relative; overflow:hidden; padding:26px; background:linear-gradient(165deg, rgba(22,26,34,0.94), rgba(16,20,28,0.98)); border:1px solid rgba(122,162,247,0.2); box-shadow:0 28px 50px rgba(4,6,12,0.55); backdrop-filter: blur(12px); display:flex; flex-direction:column; gap:24px; border-radius:18px; }
   .join-card::before { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; border:1px solid rgba(137,220,235,0.25); opacity:0.35; }
-  .join-card-header { display:flex; gap:18px; align-items:flex-start; }
+  .join-card-header { display:flex; gap:18px; align-items:flex-start; cursor:grab; user-select:none; touch-action:none; }
+  .join-layout.dragging .join-card-header { cursor:grabbing; }
   .join-emblem { width:58px; height:58px; border-radius:18px; background:linear-gradient(140deg, rgba(122,162,247,0.32), rgba(137,220,235,0.18)); border:1px solid rgba(122,162,247,0.4); box-shadow:0 12px 28px rgba(11,15,24,0.8); position:relative; }
   .join-emblem::after, .join-emblem::before { content:""; position:absolute; border-radius:999px; background:rgba(230,233,239,0.85); }
   .join-emblem::before { width:4px; height:32px; top:13px; left:27px; opacity:0.45; }
@@ -85,10 +87,7 @@
   .join-label { font-size:13px; color:rgba(230,233,239,0.78); display:flex; flex-direction:column; gap:8px; }
   #joinView input, #joinView textarea { width:100%; background:rgba(19,23,33,0.85); border:1px solid rgba(122,162,247,0.18); border-radius:10px; padding:12px 14px; transition:border-color .2s ease, box-shadow .2s ease, transform .15s ease; font-size:15px; }
   #joinView input:focus, #joinView textarea:focus { outline:none; border-color:rgba(137,220,235,0.65); box-shadow:0 0 0 3px rgba(122,162,247,0.2); transform:translateY(-1px); }
-  #joinView textarea { min-height:108px; resize:vertical; }
-  .join-highlights { list-style:none; margin:0; padding:0; display:grid; gap:10px; font-size:13px; color:rgba(139,147,167,0.88); background:rgba(13,16,24,0.6); border:1px solid rgba(122,162,247,0.12); border-radius:10px; padding:16px 18px; }
-  .join-highlights li { position:relative; padding-left:18px; }
-  .join-highlights li::before { content:""; position:absolute; width:6px; height:6px; border-radius:50%; left:0; top:8px; background:rgba(137,220,235,0.9); box-shadow:0 0 0 4px rgba(137,220,235,0.15); }
+  #joinView textarea { min-height:72px; resize:vertical; }
   .join-primary { background:linear-gradient(120deg, rgba(122,162,247,0.95) 0%, rgba(137,220,235,0.95) 100%); color:#0b0d13; border:none; border-radius:999px; padding:14px 18px; font-size:15px; font-weight:600; box-shadow:0 24px 32px rgba(8,11,20,0.55), 0 0 0 1px rgba(137,220,235,0.35); transition:transform .15s ease, box-shadow .2s ease; }
   .join-primary:hover { transform:translateY(-1px); box-shadow:0 18px 28px rgba(12,16,25,0.6), 0 0 0 1px rgba(137,220,235,0.45); }
   .join-primary:active { transform:translateY(0); box-shadow:0 12px 20px rgba(12,16,25,0.55), 0 0 0 1px rgba(137,220,235,0.4); }
@@ -217,10 +216,6 @@
           <span data-i18n="join.backgroundLabel">Short background (2–3 sentences)</span>
           <textarea id="background" rows="3" placeholder="Wizard" data-i18n-attr="placeholder:join.backgroundPlaceholder">Wizard</textarea>
         </label>
-        <ul class="join-highlights">
-          <li data-i18n="join.hintTone">Hints about tone or motivation help tailor the opening scene.</li>
-          <li data-i18n="join.hintConcise">Keep it concise so the GM can weave it into play quickly.</li>
-        </ul>
         <button id="btnEnter" class="join-primary" data-i18n="join.enter">Enter World</button>
         <p id="joinHint" class="tip join-hint" data-i18n="join.hintWaiting">You'll start right away if no adventure is running; otherwise you'll appear after the next turn resolves.</p>
         <p id="joinStatus" class="tip join-status" style="display:none"></p>
@@ -377,6 +372,10 @@
           <label>
             <span data-i18n="settings.grokKey.label">Grok API key</span>
             <input id="setGrokKey" type="text" placeholder="Paste your key…" data-i18n-attr="placeholder:settings.apiKeyPlaceholder" />
+          </label>
+          <label>
+            <span data-i18n="settings.openaiKey.label">OpenAI API key</span>
+            <input id="setOpenAIKey" type="text" placeholder="Paste your key…" data-i18n-attr="placeholder:settings.apiKeyPlaceholder" />
           </label>
           <label>
             <span data-i18n="settings.elevenKey.label">ElevenLabs API key</span>
@@ -662,6 +661,18 @@
     lastTurnScrolled: null,
   };
 
+  const joinDragState = {
+    initialized: false,
+    dragging: false,
+    dragged: false,
+    offsetX: 0,
+    offsetY: 0,
+    width: 0,
+    height: 0,
+    detachMouse: null,
+    detachTouch: null,
+  };
+
   const MODAL_IDS = [
     "settingsBack",
     "statsBack",
@@ -670,6 +681,17 @@
     "statsNarrationBack",
     "devInfoBack",
   ];
+
+  const HIDDEN_JOIN_STATUS_KEYS = new Set([
+    'join.status.requestSent',
+    'join.status.creatingWorld',
+    'join.status.queueAfterTurn',
+    'join.status.queueActive',
+    'join.status.preparing',
+    'join.status.waitingQueued',
+    'join.status.waitingActive',
+    'join.status.waitingIdle',
+  ]);
 
   function isModalVisible(element) {
     if (!element) return false;
@@ -689,7 +711,43 @@
         closedAny = true;
       }
     }
+    syncJoinViewModalVisibility();
     return closedAny;
+  }
+
+  const joinModalHideState = {
+    active: false,
+    previousDisplay: '',
+  };
+
+  function anyModalVisible() {
+    for (const id of MODAL_IDS) {
+      if (isModalVisible($(id))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function syncJoinViewModalVisibility() {
+    const joinView = $("joinView");
+    if (!joinView) return;
+    const joinScreenActive = Boolean(document && document.body && document.body.classList.contains('join-screen'));
+    const modalVisible = joinScreenActive && anyModalVisible();
+    if (modalVisible) {
+      if (!joinModalHideState.active) {
+        joinModalHideState.active = true;
+        joinModalHideState.previousDisplay = joinView.style.display || '';
+        joinView.style.display = 'none';
+      }
+    } else if (joinModalHideState.active) {
+      joinModalHideState.active = false;
+      const previousDisplay = joinModalHideState.previousDisplay;
+      joinModalHideState.previousDisplay = '';
+      if (joinScreenActive) {
+        joinView.style.display = previousDisplay || '';
+      }
+    }
   }
 
   const DEFAULT_LANGUAGE = 'en';
@@ -900,7 +958,7 @@
     "alerts.joinControlImage": { en: "Join the session to control scene images.", de: "Tritt der Sitzung bei, um Szenenbilder zu steuern." },
     "alerts.joinFailed": { en: "Join failed", de: "Beitritt fehlgeschlagen" },
     "alerts.joinFailedDetail": { en: "Join failed: {{message}}", de: "Beitritt fehlgeschlagen: {{message}}" },
-    "alerts.modelsFetchFailed": { en: "Failed to fetch models. Ensure your Gemini or Grok and ElevenLabs API keys are saved in Settings.", de: "Modelle konnten nicht geladen werden. Stelle sicher, dass deine Gemini- oder Grok- sowie ElevenLabs-API-Schlüssel in den Einstellungen gespeichert sind." },
+    "alerts.modelsFetchFailed": { en: "Failed to fetch models. Ensure your Gemini, OpenAI, or Grok and ElevenLabs API keys are saved in Settings.", de: "Modelle konnten nicht geladen werden. Stelle sicher, dass deine Gemini-, OpenAI- oder Grok- sowie ElevenLabs-API-Schlüssel in den Einstellungen gespeichert sind." },
     "alerts.nextTurnFailed": { en: "Next turn failed", de: "Nächste Runde fehlgeschlagen" },
     "alerts.nextTurnFailedDetail": { en: "Next turn failed: {{message}}", de: "Nächste Runde fehlgeschlagen: {{message}}" },
     "alerts.portraitFailed": { en: "Portrait request failed", de: "Porträtanfrage fehlgeschlagen" },
@@ -971,6 +1029,7 @@
     "devInfo.title": { en: "Text API exchange", de: "Text-API-Austausch" },
     "header.devInfo": { en: "Developer info", de: "Entwicklerinfo" },
     "header.settings": { en: "Settings", de: "Einstellungen" },
+    "header.settingsCountdown": { en: "Opening… {{seconds}}s", de: "Öffne … {{seconds}}s" },
     "header.stats": { en: "Statistics", de: "Statistiken" },
     "join.backgroundLabel": { en: "Short background (2–3 sentences)", de: "Kurzer Hintergrund (2–3 Sätze)" },
     "join.backgroundPlaceholder": { en: "Wizard", de: "Zauberer" },
@@ -1018,6 +1077,7 @@
     "settings.elevenKey.label": { en: "ElevenLabs API key", de: "ElevenLabs-API-Schlüssel" },
     "settings.geminiKey.label": { en: "Gemini API key", de: "Gemini-API-Schlüssel" },
     "settings.grokKey.label": { en: "Grok API key", de: "Grok-API-Schlüssel" },
+    "settings.openaiKey.label": { en: "OpenAI API key", de: "OpenAI-API-Schlüssel" },
     "settings.imageModel.label": { en: "Image model", de: "Bildmodell" },
     "settings.narrationModel.disabledTitle": { en: "Save a valid ElevenLabs API key to load narration models.", de: "Speichere einen gültigen ElevenLabs-API-Schlüssel, um Erzählmodelle zu laden." },
     "settings.narrationModel.enterKey": { en: "Enter ElevenLabs API key to load models", de: "Gib einen ElevenLabs-API-Schlüssel ein, um Modelle zu laden" },
@@ -1571,6 +1631,13 @@
     const key = options.key;
     const args = options.args;
     const hasKey = Boolean(key);
+    if (hasKey && HIDDEN_JOIN_STATUS_KEYS.has(key)) {
+      el.textContent = "";
+      el.style.display = "none";
+      state.joinStatusKey = null;
+      state.joinStatusArgs = null;
+      return;
+    }
     const message = hasKey ? t(key, args) : text;
     if (!message) {
       el.textContent = "";
@@ -1626,15 +1693,152 @@
   }
 
   function showGameView() {
-    if ($("joinView")) $("joinView").style.display = "none";
+    if (document && document.body) document.body.classList.remove('join-screen');
+    cancelJoinDrag();
+    const joinView = $("joinView");
+    if (joinView) joinView.style.display = "none";
     if ($("gameView")) $("gameView").style.display = "";
     if ($("side")) $("side").style.display = "";
   }
 
   function showJoinView() {
-    if ($("joinView")) $("joinView").style.display = "";
+    if (document && document.body) document.body.classList.add('join-screen');
+    const joinView = $("joinView");
+    if (joinView) {
+      joinView.style.display = "";
+      joinView.classList.remove('dragging');
+      if (!joinDragState.dragged) {
+        joinView.style.top = "8vh";
+        joinView.style.left = "50%";
+        joinView.style.right = "";
+        joinView.style.bottom = "";
+        joinView.style.transform = "translateX(-50%)";
+      }
+    }
     if ($("gameView")) $("gameView").style.display = "none";
     if ($("side")) $("side").style.display = "none";
+    initJoinDrag();
+    syncJoinViewModalVisibility();
+  }
+
+  function cancelJoinDrag() {
+    if (joinDragState.detachMouse) joinDragState.detachMouse();
+    if (joinDragState.detachTouch) joinDragState.detachTouch();
+    joinDragState.dragging = false;
+    const joinView = $("joinView");
+    if (joinView) joinView.classList.remove('dragging');
+  }
+
+  function initJoinDrag() {
+    if (joinDragState.initialized) return;
+    const joinView = $("joinView");
+    if (!joinView) return;
+    const handle = joinView.querySelector('.join-card-header');
+    if (!handle) return;
+    joinDragState.initialized = true;
+
+    const updatePosition = (clientX, clientY) => {
+      if (!joinDragState.dragging) return;
+      const maxLeft = Math.max(window.innerWidth - joinDragState.width, 0);
+      const maxTop = Math.max(window.innerHeight - joinDragState.height, 0);
+      const nextLeft = Math.min(Math.max(clientX - joinDragState.offsetX, 0), maxLeft);
+      const nextTop = Math.min(Math.max(clientY - joinDragState.offsetY, 0), maxTop);
+      joinView.style.left = `${nextLeft}px`;
+      joinView.style.top = `${nextTop}px`;
+    };
+
+    const finishDrag = () => {
+      if (!joinDragState.dragging) return;
+      joinDragState.dragging = false;
+      joinView.classList.remove('dragging');
+      if (joinDragState.detachMouse) joinDragState.detachMouse();
+      if (joinDragState.detachTouch) joinDragState.detachTouch();
+    };
+
+    const onMouseMove = (event) => updatePosition(event.clientX, event.clientY);
+    const onMouseUp = () => {
+      finishDrag();
+    };
+    const onMouseDown = (event) => {
+      if (event.button !== 0) return;
+      const rect = joinView.getBoundingClientRect();
+      joinDragState.dragging = true;
+      joinDragState.dragged = true;
+      joinDragState.offsetX = event.clientX - rect.left;
+      joinDragState.offsetY = event.clientY - rect.top;
+      joinDragState.width = rect.width;
+      joinDragState.height = rect.height;
+      joinView.style.transform = 'none';
+      joinView.style.left = `${rect.left}px`;
+      joinView.style.top = `${rect.top}px`;
+      joinView.style.right = '';
+      joinView.style.bottom = '';
+      joinView.classList.add('dragging');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      event.preventDefault();
+    };
+
+    const onTouchMove = (event) => {
+      if (!event.touches || !event.touches.length) return;
+      const touch = event.touches[0];
+      updatePosition(touch.clientX, touch.clientY);
+      event.preventDefault();
+    };
+    const onTouchEnd = () => {
+      finishDrag();
+    };
+    const onTouchStart = (event) => {
+      if (!event.touches || !event.touches.length) return;
+      const touch = event.touches[0];
+      const rect = joinView.getBoundingClientRect();
+      joinDragState.dragging = true;
+      joinDragState.dragged = true;
+      joinDragState.offsetX = touch.clientX - rect.left;
+      joinDragState.offsetY = touch.clientY - rect.top;
+      joinDragState.width = rect.width;
+      joinDragState.height = rect.height;
+      joinView.style.transform = 'none';
+      joinView.style.left = `${rect.left}px`;
+      joinView.style.top = `${rect.top}px`;
+      joinView.style.right = '';
+      joinView.style.bottom = '';
+      joinView.classList.add('dragging');
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+      event.preventDefault();
+    };
+
+    joinDragState.detachMouse = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    joinDragState.detachTouch = () => {
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    handle.addEventListener('mousedown', onMouseDown);
+    handle.addEventListener('touchstart', onTouchStart, { passive: false });
+
+    const ensureWithinBounds = () => {
+      if (!joinDragState.dragged) return;
+      const rect = joinView.getBoundingClientRect();
+      const maxLeft = Math.max(window.innerWidth - rect.width, 0);
+      const maxTop = Math.max(window.innerHeight - rect.height, 0);
+      const currentLeft = parseFloat(joinView.style.left || rect.left);
+      const currentTop = parseFloat(joinView.style.top || rect.top);
+      const nextLeft = Math.min(Math.max(currentLeft, 0), maxLeft);
+      const nextTop = Math.min(Math.max(currentTop, 0), maxTop);
+      joinView.style.left = `${nextLeft}px`;
+      joinView.style.top = `${nextTop}px`;
+      joinDragState.width = rect.width;
+      joinDragState.height = rect.height;
+    };
+
+    window.addEventListener('resize', ensureWithinBounds);
   }
 
   function populateList(listEl, items, renderItem, emptyMessage) {
@@ -2385,205 +2589,233 @@
 
   // Populate settings modal
   async function openSettings() {
-    await ensureWorldStylesInitialized();
-    const s = await (await fetch("/api/settings")).json();
-    const worldSelect = $("setWorld");
-    const customWorldInput = $("setWorldCustom");
-    if (worldSelect) {
-      const rawWorldStyle = typeof s.world_style === 'string' ? s.world_style.trim() : '';
-      const normalizedRaw = normalizeWorldStyleValue(rawWorldStyle);
-      if (normalizedRaw === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
-        if (customWorldInput) {
-          customWorldInput.value = '';
-        }
-        selectWorldStyle(CUSTOM_WORLD_VALUE, { silent: true });
-      } else if (rawWorldStyle && !worldStyleExists(rawWorldStyle)) {
-        if (customWorldInput) {
-          customWorldInput.value = rawWorldStyle;
-        }
-        selectWorldStyle(CUSTOM_WORLD_VALUE, { silent: true });
-      } else {
-        if (customWorldInput) {
-          customWorldInput.value = '';
-        }
-        const valueToApply = rawWorldStyle || DEFAULT_WORLD_STYLE;
-        selectWorldStyle(valueToApply, { silent: true });
-      }
-    }
-    $("setDiff").value = s.difficulty || "Normal";
-    $("setThinking").value = (s.thinking_mode || "none");
-    const historyToggle = $("setHistorySummary");
-    if (historyToggle) {
-      historyToggle.checked = String(s.history_mode || 'full').toLowerCase() === 'summary';
-    }
-    const fxSaverToggle = $("setFxSaver");
-    if (fxSaverToggle) {
-      fxSaverToggle.checked = !!state.fxSaverEnabled;
-    }
-    // Fetch models first, then set selection
-    const textSel = $("setTextModel");
-    const imgSel = $("setImageModel");
-    const narrationSel = $("setNarrationModel");
+    startButtonCountdown('btnSettings', (seconds) => t('header.settingsCountdown', { seconds }));
     try {
-      const resp = await fetch("/api/models");
-      if (!resp.ok) throw new Error("model list request failed");
-      const models = await resp.json();
-      const availableModels = models.models || [];
-      const narrationModels = Array.isArray(models.narration_models) ? models.narration_models : [];
-
-      textSel.innerHTML = "";
-      const seenTextModels = new Set();
-      const textOptions = [];
-      availableModels.forEach(m => {
-        const provider = String(m.provider || 'gemini').toLowerCase();
-        const supported = Array.isArray(m.supported) ? m.supported.map(x => String(x).toLowerCase()) : [];
-        const supportsText = (
-          provider === 'grok'
-            ? supported.some(x => x.includes('chat'))
-            : supported.includes('generatecontent')
-        );
-        if (!supportsText) return;
-        let rawName = String(m.name || '').trim();
-        if (!rawName) return;
-        if (provider === 'gemini') {
-          rawName = rawName.replace(/^models\//, '');
+      await ensureWorldStylesInitialized();
+      const s = await (await fetch("/api/settings")).json();
+      const worldSelect = $("setWorld");
+      const customWorldInput = $("setWorldCustom");
+      if (worldSelect) {
+        const rawWorldStyle = typeof s.world_style === 'string' ? s.world_style.trim() : '';
+        const normalizedRaw = normalizeWorldStyleValue(rawWorldStyle);
+        if (normalizedRaw === normalizeWorldStyleValue(CUSTOM_WORLD_VALUE)) {
+          if (customWorldInput) {
+            customWorldInput.value = '';
+          }
+          selectWorldStyle(CUSTOM_WORLD_VALUE, { silent: true });
+        } else if (rawWorldStyle && !worldStyleExists(rawWorldStyle)) {
+          if (customWorldInput) {
+            customWorldInput.value = rawWorldStyle;
+          }
+          selectWorldStyle(CUSTOM_WORLD_VALUE, { silent: true });
+        } else {
+          if (customWorldInput) {
+            customWorldInput.value = '';
+          }
+          const valueToApply = rawWorldStyle || DEFAULT_WORLD_STYLE;
+          selectWorldStyle(valueToApply, { silent: true });
         }
-        if (!rawName) return;
-        if (seenTextModels.has(rawName)) return;
-        seenTextModels.add(rawName);
-        const label = String(m.displayName || m.name || rawName);
-        const suffix = provider === 'grok' ? ' · Grok' : provider === 'gemini' ? ' · Gemini' : '';
-        textOptions.push({
-          value: rawName,
-          provider,
-          display: `${label}${suffix}`,
+      }
+      $("setDiff").value = s.difficulty || "Normal";
+      $("setThinking").value = (s.thinking_mode || "none");
+      const historyToggle = $("setHistorySummary");
+      if (historyToggle) {
+        historyToggle.checked = String(s.history_mode || 'full').toLowerCase() === 'summary';
+      }
+      const fxSaverToggle = $("setFxSaver");
+      if (fxSaverToggle) {
+        fxSaverToggle.checked = !!state.fxSaverEnabled;
+      }
+      // Fetch models first, then set selection
+      const textSel = $("setTextModel");
+      const imgSel = $("setImageModel");
+      const narrationSel = $("setNarrationModel");
+      try {
+        const resp = await fetch("/api/models");
+        if (!resp.ok) throw new Error("model list request failed");
+        const models = await resp.json();
+        const availableModels = models.models || [];
+        const narrationModels = Array.isArray(models.narration_models) ? models.narration_models : [];
+
+        textSel.innerHTML = "";
+        const seenTextModels = new Set();
+        const textOptions = [];
+        availableModels.forEach(m => {
+          const provider = String(m.provider || 'gemini').toLowerCase();
+          const supported = Array.isArray(m.supported) ? m.supported.map(x => String(x).toLowerCase()) : [];
+          let supportsText = false;
+          if (provider === 'grok') {
+            supportsText = supported.some(x => x.includes('chat'));
+          } else if (provider === 'openai') {
+            supportsText = supported.some(x => x.includes('response') || x.includes('chat') || x.includes('completion'));
+            if (!supportsText && !supported.length) supportsText = true;
+          } else {
+            supportsText = supported.includes('generatecontent') || supported.includes('responses');
+          }
+          if (!supportsText) return;
+          let rawName = String(m.name || '').trim();
+          if (!rawName) return;
+          if (provider === 'gemini') {
+            rawName = rawName.replace(/^models\//, '');
+            if (!rawName.toLowerCase().startsWith('gemini-2.5')) {
+              return;
+            }
+            if (!rawName) return;
+          } else if (provider === 'openai') {
+            rawName = rawName.replace(/^openai[\/:]/, '');
+            if (!rawName.toLowerCase().startsWith('gpt-5')) {
+              return;
+            }
+            if (!rawName) return;
+          } else if (provider === 'grok') {
+            if (!rawName.toLowerCase().startsWith('grok-4')) {
+              return;
+            }
+          }
+          if (seenTextModels.has(rawName)) return;
+          seenTextModels.add(rawName);
+          const label = String(m.displayName || m.name || rawName);
+          const suffix = provider === 'grok' ? ' · Grok' : provider === 'gemini' ? ' · Gemini' : provider === 'openai' ? ' · OpenAI' : '';
+          textOptions.push({
+            value: rawName,
+            provider,
+            display: `${label}${suffix}`,
+          });
         });
-      });
-      textOptions.sort((a, b) => a.display.localeCompare(b.display, undefined, { sensitivity: 'base' }));
-      textOptions.forEach(entry => {
-        const opt = document.createElement('option');
-        opt.value = entry.value;
-        opt.dataset.provider = entry.provider;
-        opt.textContent = entry.display;
-        textSel.appendChild(opt);
-      });
-      const desiredTextModel = (s.text_model || DEFAULT_TEXT_MODEL || '').trim();
-      if (desiredTextModel) {
-        const optionAvailable = [...textSel.options].some((opt) => opt.value === desiredTextModel);
-        if (optionAvailable) {
-          textSel.value = desiredTextModel;
+        textOptions.sort((a, b) => a.display.localeCompare(b.display, undefined, { sensitivity: 'base' }));
+        textOptions.forEach(entry => {
+          const opt = document.createElement('option');
+          opt.value = entry.value;
+          opt.dataset.provider = entry.provider;
+          opt.textContent = entry.display;
+          textSel.appendChild(opt);
+        });
+        const desiredTextModel = (s.text_model || DEFAULT_TEXT_MODEL || '').trim();
+        if (desiredTextModel) {
+          const optionAvailable = [...textSel.options].some((opt) => opt.value === desiredTextModel);
+          if (optionAvailable) {
+            textSel.value = desiredTextModel;
+          } else if (textSel.options.length) {
+            textSel.selectedIndex = 0;
+          }
         } else if (textSel.options.length) {
           textSel.selectedIndex = 0;
         }
-      } else if (textSel.options.length) {
-        textSel.selectedIndex = 0;
-      }
 
-      imgSel.innerHTML = "";
-      // From live list, prefer the official image-preview model
-      availableModels.forEach(m => {
-        const provider = String(m.provider || 'gemini').toLowerCase();
-        if (provider !== 'gemini') return;
-        const nm = m.name.replace(/^models\//,"");
-        if (nm.includes("flash-image")) {
-          const opt = document.createElement("option");
-          opt.value = nm;
-          opt.textContent = m.displayName || nm;
-          imgSel.appendChild(opt);
-        }
-      });
-      // Fallback UI case: if not present in the account/region, show none (per requirement: no fallback hardcoding)
-      if (s.image_model) {
-        const exists = [...imgSel.options].some(o => o.value === s.image_model);
-        if (exists) imgSel.value = s.image_model;
-      }
-
-      if (narrationSel) {
-        narrationSel.innerHTML = "";
-        narrationSel.removeAttribute("disabled");
-        narrationSel.title = "";
-
-        const allowedNarrationModels = narrationModels.filter((model) => modelSupportsLanguage(model, state.language));
-        allowedNarrationModels.forEach(m => {
-          const value = m.id || m.model_id || m.modelId;
-          if (!value) return;
-          const opt = document.createElement("option");
-          opt.value = value;
-          const labelText = m.name || value;
-          opt.textContent = labelText;
-          narrationSel.appendChild(opt);
-        });
-
-        if (s.narration_model) {
-          const hasModel = [...narrationSel.options].some(o => o.value === s.narration_model);
-          if (hasModel) {
-            narrationSel.value = s.narration_model;
-          } else {
+        imgSel.innerHTML = "";
+        // From live list, prefer the official image-preview model
+        availableModels.forEach(m => {
+          const provider = String(m.provider || 'gemini').toLowerCase();
+          if (provider !== 'gemini') return;
+          const nm = m.name.replace(/^models\//,"");
+          if (nm.includes("flash-image")) {
             const opt = document.createElement("option");
-            opt.value = s.narration_model;
-            opt.textContent = `${s.narration_model} ${t('settings.narrationModel.savedSuffix')}`;
-            narrationSel.appendChild(opt);
-            narrationSel.value = s.narration_model;
+            opt.value = nm;
+            opt.textContent = m.displayName || nm;
+            imgSel.appendChild(opt);
           }
+        });
+        // Fallback UI case: if not present in the account/region, show none (per requirement: no fallback hardcoding)
+        if (s.image_model) {
+          const exists = [...imgSel.options].some(o => o.value === s.image_model);
+          if (exists) imgSel.value = s.image_model;
         }
 
-        if (!allowedNarrationModels.length) {
-          if (!narrationSel.options.length) {
-            const savedNarr = (s.narration_model || "").trim();
-            if (savedNarr) {
-              const opt = document.createElement("option");
-              opt.value = savedNarr;
-              opt.textContent = `${savedNarr} ${t('settings.narrationModel.savedSuffix')}`;
-              narrationSel.appendChild(opt);
-              narrationSel.value = savedNarr;
-            } else {
-              const opt = document.createElement("option");
-              opt.value = "";
-              opt.textContent = t('settings.narrationModel.enterKey');
-              opt.disabled = true;
-              opt.selected = true;
-              narrationSel.appendChild(opt);
-            }
-          }
-          narrationSel.setAttribute("disabled", "true");
-          narrationSel.title = t('settings.narrationModel.disabledTitle');
-        }
-
-        if (allowedNarrationModels.length) {
+        if (narrationSel) {
+          narrationSel.innerHTML = "";
           narrationSel.removeAttribute("disabled");
           narrationSel.title = "";
-        }
-      }
-    } catch (e) {
-      alert(t('alerts.modelsFetchFailed'));
-    }
 
-    const keyInput = $("setKey");
-    if (keyInput) keyInput.value = typeof s.api_key === 'string' ? s.api_key : '';
-    const grokKeyInput = $("setGrokKey");
-    if (grokKeyInput) grokKeyInput.value = typeof s.grok_api_key === 'string' ? s.grok_api_key : '';
-    const elevenKeyInput = $("setElevenKey");
-    if (elevenKeyInput) {
-      elevenKeyInput.value = typeof s.elevenlabs_api_key === 'string' ? s.elevenlabs_api_key : '';
-    }
-    const shareEl = $("shareUrl");
-    if (shareEl) {
-      const scheme = window.location.protocol === "https:" ? "https" : "http";
-      const portSuffix = window.location.port ? `:${window.location.port}` : "";
-      shareEl.textContent = `${scheme}://<your-public-ip-or-domain>${portSuffix}/`;
-      try {
-        const pubUrl = await (await fetch("/api/public_url")).json();
-        if (pubUrl && pubUrl.url) {
-          shareEl.textContent = pubUrl.url;
+          const allowedNarrationModels = narrationModels.filter((model) => modelSupportsLanguage(model, state.language));
+          allowedNarrationModels.forEach(m => {
+            const value = m.id || m.model_id || m.modelId;
+            if (!value) return;
+            const opt = document.createElement("option");
+            opt.value = value;
+            const labelText = m.name || value;
+            opt.textContent = labelText;
+            narrationSel.appendChild(opt);
+          });
+
+          if (s.narration_model) {
+            const hasModel = [...narrationSel.options].some(o => o.value === s.narration_model);
+            if (hasModel) {
+              narrationSel.value = s.narration_model;
+            } else {
+              const opt = document.createElement("option");
+              opt.value = s.narration_model;
+              opt.textContent = `${s.narration_model} ${t('settings.narrationModel.savedSuffix')}`;
+              narrationSel.appendChild(opt);
+              narrationSel.value = s.narration_model;
+            }
+          }
+
+          if (!allowedNarrationModels.length) {
+            if (!narrationSel.options.length) {
+              const savedNarr = (s.narration_model || "").trim();
+              if (savedNarr) {
+                const opt = document.createElement("option");
+                opt.value = savedNarr;
+                opt.textContent = `${savedNarr} ${t('settings.narrationModel.savedSuffix')}`;
+                narrationSel.appendChild(opt);
+                narrationSel.value = savedNarr;
+              } else {
+                const opt = document.createElement("option");
+                opt.value = "";
+                opt.textContent = t('settings.narrationModel.enterKey');
+                opt.disabled = true;
+                opt.selected = true;
+                narrationSel.appendChild(opt);
+              }
+            }
+            narrationSel.setAttribute("disabled", "true");
+            narrationSel.title = t('settings.narrationModel.disabledTitle');
+          }
+
+          if (allowedNarrationModels.length) {
+            narrationSel.removeAttribute("disabled");
+            narrationSel.title = "";
+          }
         }
-      } catch (err) {
-        // Fallback placeholder remains visible
+      } catch (e) {
+        alert(t('alerts.modelsFetchFailed'));
       }
+
+      const keyInput = $("setKey");
+      if (keyInput) keyInput.value = typeof s.api_key === 'string' ? s.api_key : '';
+      const grokKeyInput = $("setGrokKey");
+      if (grokKeyInput) grokKeyInput.value = typeof s.grok_api_key === 'string' ? s.grok_api_key : '';
+      const openaiKeyInput = $("setOpenAIKey");
+      if (openaiKeyInput) openaiKeyInput.value = typeof s.openai_api_key === 'string' ? s.openai_api_key : '';
+      const elevenKeyInput = $("setElevenKey");
+      if (elevenKeyInput) {
+        elevenKeyInput.value = typeof s.elevenlabs_api_key === 'string' ? s.elevenlabs_api_key : '';
+      }
+      const shareEl = $("shareUrl");
+      if (shareEl) {
+        const scheme = window.location.protocol === "https:" ? "https" : "http";
+        const portSuffix = window.location.port ? `:${window.location.port}` : "";
+        shareEl.textContent = `${scheme}://<your-public-ip-or-domain>${portSuffix}/`;
+        try {
+          const pubUrl = await (await fetch("/api/public_url")).json();
+          if (pubUrl && pubUrl.url) {
+            shareEl.textContent = pubUrl.url;
+          }
+        } catch (err) {
+          // Fallback placeholder remains visible
+        }
+      }
+      $("settingsBack").style.display = "flex";
+      syncJoinViewModalVisibility();
+    } finally {
+      stopButtonCountdown('btnSettings');
     }
-    $("settingsBack").style.display = "flex";
   }
   $("btnSettings").onclick = openSettings;
-  $("btnCloseSettings").onclick = () => $("settingsBack").style.display = "none";
+  $("btnCloseSettings").onclick = () => {
+    $("settingsBack").style.display = "none";
+    syncJoinViewModalVisibility();
+  };
   initializeWorldStylePicker();
   const worldStyleSelect = $('setWorld');
   if (worldStyleSelect) {
@@ -2638,6 +2870,11 @@
       const grokKeyVal = grokKeyInput.value.trim();
       if (grokKeyVal) body.grok_api_key = grokKeyVal;
     }
+    const openaiKeyInput = $("setOpenAIKey");
+    if (openaiKeyInput) {
+      const openaiKeyVal = openaiKeyInput.value.trim();
+      if (openaiKeyVal) body.openai_api_key = openaiKeyVal;
+    }
     const elevenKeyInput = $("setElevenKey");
     if (elevenKeyInput) {
       const elevenKeyVal = elevenKeyInput.value.trim();
@@ -2651,6 +2888,7 @@
     if (!resp.ok) { alert(t('alerts.settingsSaveFailed')); return; }
     applyFxSaver(nextFxSaver, { persist: true });
     $("settingsBack").style.display = "none";
+    syncJoinViewModalVisibility();
   };
 
   const languageSelect = $('languageSelect');
@@ -2748,6 +2986,7 @@
         const data = await resp.json();
         renderDeveloperInfoModal(data || {});
         devInfoModal.style.display = 'flex';
+        syncJoinViewModalVisibility();
       } catch (err) {
         alert(t('devInfo.fetchError'));
       }
@@ -2757,6 +2996,7 @@
   if (btnCloseDevInfo && devInfoModal) {
     btnCloseDevInfo.addEventListener('click', () => {
       devInfoModal.style.display = 'none';
+      syncJoinViewModalVisibility();
     });
   }
 
@@ -2765,32 +3005,48 @@
       updateStats(state.lastPublic.token_usage);
     }
     $("statsBack").style.display = "flex";
+    syncJoinViewModalVisibility();
   };
-  $("btnCloseStats").onclick = () => $("statsBack").style.display = "none";
+  $("btnCloseStats").onclick = () => {
+    $("statsBack").style.display = "none";
+    syncJoinViewModalVisibility();
+  };
 
   $("btnStatsText").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
     $("statsTextBack").style.display = "flex";
+    syncJoinViewModalVisibility();
   };
-  $("btnCloseStatsText").onclick = () => $("statsTextBack").style.display = "none";
+  $("btnCloseStatsText").onclick = () => {
+    $("statsTextBack").style.display = "none";
+    syncJoinViewModalVisibility();
+  };
 
   $("btnStatsImage").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
     $("statsImageBack").style.display = "flex";
+    syncJoinViewModalVisibility();
   };
-  $("btnCloseStatsImage").onclick = () => $("statsImageBack").style.display = "none";
+  $("btnCloseStatsImage").onclick = () => {
+    $("statsImageBack").style.display = "none";
+    syncJoinViewModalVisibility();
+  };
 
   $("btnStatsNarration").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
     $("statsNarrationBack").style.display = "flex";
+    syncJoinViewModalVisibility();
   };
-  $("btnCloseStatsNarration").onclick = () => $("statsNarrationBack").style.display = "none";
+  $("btnCloseStatsNarration").onclick = () => {
+    $("statsNarrationBack").style.display = "none";
+    syncJoinViewModalVisibility();
+  };
 
   const narrationButton = $("btnNarration");
   if (narrationButton) {
@@ -2844,14 +3100,9 @@
     const nameVal = $("name").value || "Hephaest";
     const backgroundVal = $("background").value || "Wizard";
     rememberJoinInputs(nameVal, backgroundVal);
-    const activeScenario = scenarioIsActive();
     setJoinWaiting(true);
     startButtonCountdown('btnEnter', (seconds) => t('join.countdown', { seconds }));
-    if (activeScenario) {
-      updateJoinStatus('', { key: 'join.status.requestSent' });
-    } else {
-      updateJoinStatus('', { key: 'join.status.creatingWorld' });
-    }
+    updateJoinStatus('');
     const body = { name: nameVal, background: backgroundVal, language: state.language };
     let resp;
     try {
@@ -2887,7 +3138,7 @@
       background: backgroundVal,
       pending: true,
     });
-    updateJoinStatus('', { key: 'join.status.queueAfterTurn' });
+    updateJoinStatus('');
     showJoinView();
     connectWS();
   };
