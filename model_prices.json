@@ -1,5 +1,5 @@
 {
-  "source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "source": "https://ai.google.dev/gemini-api/docs/pricing, https://openai.com/pricing, https://x.ai/pricing",
   "currency": "USD",
   "updated_at": "2025-09-20",
   "text": {
@@ -156,6 +156,148 @@
           "description": "Lightweight Grok 3 variant for math/reasoning tasks.",
           "access": "API usage-based; select app integrations.",
           "context_window_tokens": 132000
+        }
+      },
+      "gpt-4o": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 5.0}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 15.0}
+        ],
+        "metadata": {
+          "description": "Flagship multimodal OpenAI GPT-4o model.",
+          "access": "Requires paid OpenAI API plan.",
+          "context_window_tokens": 128000
+        }
+      },
+      "gpt-4o-mini": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.15}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.6}
+        ],
+        "metadata": {
+          "description": "Cost-effective GPT-4o Mini for fast text use cases.",
+          "access": "Requires paid OpenAI API plan.",
+          "context_window_tokens": 128000
+        }
+      },
+      "gpt-4.1": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 15.0}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 60.0}
+        ],
+        "metadata": {
+          "description": "OpenAI GPT-4.1 reasoning-capable model.",
+          "access": "Requires paid OpenAI API plan.",
+          "context_window_tokens": 128000
+        }
+      },
+      "gpt-4.1-mini": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 1.5}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 6.0}
+        ],
+        "metadata": {
+          "description": "OpenAI GPT-4.1 Mini for balanced cost and quality.",
+          "access": "Requires paid OpenAI API plan.",
+          "context_window_tokens": 128000
+        }
+      },
+      "gpt-5": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 1.25}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.125}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 10.0}
+        ]
+      },
+      "gpt-5-2025-08-07": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 1.25}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.125}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 10.0}
+        ]
+      },
+      "gpt-5-chat-latest": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 1.25}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.125}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 10.0}
+        ]
+      },
+      "gpt-5-mini": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.25}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.025}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 2.0}
+        ]
+      },
+      "gpt-5-mini-2025-08-07": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.25}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.025}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 2.0}
+        ]
+      },
+      "gpt-5-nano": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.05}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.005}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.4}
+        ]
+      },
+      "gpt-5-nano-2025-08-07": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.05}
+        ],
+        "cached_prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.005}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 0.4}
+        ]
+      },
+      "o1-mini": {
+        "prompt": [
+          {"max_prompt_tokens": null, "usd_per_million": 3.0}
+        ],
+        "completion": [
+          {"max_prompt_tokens": null, "usd_per_million": 12.0}
+        ],
+        "metadata": {
+          "description": "OpenAI o1 Mini deliberate reasoning model.",
+          "access": "Requires paid OpenAI API plan.",
+          "context_window_tokens": 64000
         }
       }
     }
