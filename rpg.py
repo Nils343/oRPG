@@ -30,7 +30,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 APP_DIR = Path(__file__).parent
-RESOURCES_DIR = APP_DIR / "resources"
 SETTINGS_FILE = APP_DIR / "settings.json"
 PROMPT_FILE = APP_DIR / "gm_prompt.txt"
 PROMPT_FILES = {
@@ -2650,7 +2649,11 @@ def _parse_data_url(data_url: str) -> Optional[Tuple[str, str]]:
 
 
 def _build_scene_image_parts(prompt: str) -> Optional[List[Dict[str, Any]]]:
-    """Assemble user parts for scene images, including portrait references when available."""
+    """Assemble user parts for scene images.
+
+    - Inlines player portrait references so the image model can keep faces consistent.
+    - Adds concise directives per player to reflect their current inventory and conditions.
+    """
     references: List[Tuple[Player, str, str]] = []
     for player_id in sorted(STATE.players.keys()):
         player = STATE.players[player_id]
@@ -2667,9 +2670,11 @@ def _build_scene_image_parts(prompt: str) -> Optional[List[Dict[str, Any]]]:
     parts: List[Dict[str, Any]] = []
     for player, mime, data in references:
         parts.append({"inlineData": {"mimeType": mime, "data": data}})
+    world_style = STATE.settings.get("world_style", "High fantasy")
     directive_lines: List[str] = [
         "Use the provided player portraits to keep each adventurer's appearance consistent across this scene.",
         "Match faces, hair, and distinctive accessories from the references even if lighting or outfits change.",
+        f"World style: {world_style}. Keep the setting aesthetics consistent.",
     ]
     for player, _, _ in references:
         descriptors: List[str] = []
@@ -2687,6 +2692,18 @@ def _build_scene_image_parts(prompt: str) -> Optional[List[Dict[str, Any]]]:
             directive_lines.append(f"{player.name}: match the portrait reference ({descriptor_text}).")
         else:
             directive_lines.append(f"{player.name}: match the portrait reference.")
+
+        # Inventory and conditions guide the depiction of equipment/props and visible state.
+        inv_items = [item.strip() for item in (player.inventory or []) if isinstance(item, str) and item.strip()]
+        if inv_items:
+            directive_lines.append(
+                f"{player.name}: include visible gear from inventory ({', '.join(inv_items)})."
+            )
+        cond_items = [c.strip() for c in (player.conditions or []) if isinstance(c, str) and c.strip()]
+        if cond_items:
+            directive_lines.append(
+                f"{player.name}: reflect current conditions ({', '.join(cond_items)})."
+            )
     prompt_text = (prompt or "").strip()
     if prompt_text:
         directive_lines.extend(["", f"Scene prompt: {prompt_text}"])
@@ -3027,6 +3044,7 @@ def build_portrait_prompt(player: Player) -> str:
 
     prompt = (
         f"Highly detailed bust portrait of {player.name}, a {descriptor_text} from a {world_style} setting. "
+        f"World style: {world_style}. Keep the aesthetic consistent with this genre. "
         "Centered head and shoulders, cohesive lighting, clean backdrop, ready for use as a small game avatar. "
         "Painterly concept art finish, crisp readable details, square format."
     )
@@ -3166,8 +3184,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Nils' RPG", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
-if RESOURCES_DIR.exists():
-    app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resources")
 
 
 # --------- Static root ---------

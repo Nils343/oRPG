@@ -18,7 +18,7 @@
   body { margin:0; font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif; min-height:100vh; background: var(--bg); color: var(--fg); }
   body.join-screen {
     background-color: var(--bg);
-    background-image: url("/resources/Character_Generation.png");
+    background-image: var(--join-screen-bg, url("/static/img/dungeon-gate.png"));
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -102,6 +102,7 @@
     .join-emblem::after { top:24px; left:12px; width:28px; }
   }
   .row { display:flex; gap:10px; align-items:center; }
+  .fullscreen-hint { font-size:11px; color:var(--muted); white-space:pre-line; margin-left:4px; line-height:1.2; }
   .right { margin-left:auto; }
   #scenario { white-space:pre-wrap; line-height:1.4; overflow-y:auto; max-height:60vh; padding-right:6px; }
   .scenario-block { white-space:pre-wrap; margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid rgba(122,162,247,0.2); }
@@ -131,6 +132,8 @@
   .player-tags { display:flex; flex-wrap:wrap; gap:6px; }
   .list-note { list-style:none; font-size:12px; color: var(--muted); padding-left:0; margin-left:0; }
   .list-note::marker { content:""; }
+  .list-added { color: var(--ok); }
+  .list-removed { color: var(--bad); text-decoration: line-through; }
   /* Modal */
   .modalBack { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
   .modal { width:min(720px, 92vw); background: var(--card); border:1px solid #2a3142; border-radius:12px; padding:16px; }
@@ -190,6 +193,8 @@
       <option value="en" data-i18n-option="language.option.english">English</option>
       <option value="de" data-i18n-option="language.option.german">Deutsch</option>
     </select>
+    <span id="fullscreenHint" class="fullscreen-hint" data-i18n="header.fullscreenHint">Press
+F11</span>
   </div>
 </header>
 
@@ -621,6 +626,33 @@
   }
 
   const $ = (id) => document.getElementById(id);
+
+  const JOIN_BACKGROUNDS = [
+    "/static/img/ashen-citadel.png",
+    "/static/img/crescent-gateway.png",
+    "/static/img/dungeon-gate.png",
+    "/static/img/emberspire-citadel.png",
+    "/static/img/forgotten-crypt.png",
+    "/static/img/gloom-hall.png",
+    "/static/img/omen-sorcerer.png",
+    "/static/img/verdant-gateway.png",
+  ];
+
+  function pickJoinBackground() {
+    if (!JOIN_BACKGROUNDS.length) return null;
+    const index = Math.floor(Math.random() * JOIN_BACKGROUNDS.length);
+    return JOIN_BACKGROUNDS[index];
+  }
+
+  function applyJoinBackground(url) {
+    if (!document || !document.body) return;
+    if (url) {
+      document.body.style.setProperty('--join-screen-bg', `url("${url}")`);
+    } else {
+      document.body.style.removeProperty('--join-screen-bg');
+    }
+  }
+
   const state = {
     playerId: null,
     playerToken: null,
@@ -632,11 +664,24 @@
     autoTtsEnabled: false,
     autoImageEnabled: false,
     language: 'en',
+    joinBackgroundUrl: null,
     currentTurn: 0,
     joinStatusKey: null,
     joinStatusArgs: null,
     lastPrivate: null,
     fxSaverEnabled: initialFxSaver,
+    youHighlights: {
+      turn: 0,
+      abilities: new Map(),
+      inventory: new Map(),
+      conditions: new Map(),
+    },
+    youRemovals: {
+      turn: 0,
+      abilities: new Map(),
+      inventory: new Map(),
+      conditions: new Map(),
+    },
   };
 
   function applyFxSaver(enabled, options = {}) {
@@ -1031,6 +1076,7 @@
     "header.settings": { en: "Settings", de: "Einstellungen" },
     "header.settingsCountdown": { en: "Opening… {{seconds}}s", de: "Öffne … {{seconds}}s" },
     "header.stats": { en: "Statistics", de: "Statistiken" },
+    "header.fullscreenHint": { en: "Press\nF11", de: "Drücke\nF11" },
     "join.backgroundLabel": { en: "Short background (2–3 sentences)", de: "Kurzer Hintergrund (2–3 Sätze)" },
     "join.backgroundPlaceholder": { en: "Wizard", de: "Zauberer" },
     "join.countdown": { en: "Entering… {{seconds}}s", de: "Betrete … {{seconds}}s" },
@@ -1374,6 +1420,8 @@
     if (state.lastPrivate) {
       renderPrivate(state.lastPrivate);
     }
+
+    syncFullscreenHint();
   }
 
   function initLanguage() {
@@ -1384,7 +1432,23 @@
   let systemNoticeTimer = null;
   const buttonCountdowns = new Map();
 
+  function syncFullscreenHint() {
+    const hint = $('fullscreenHint');
+    if (hint) {
+      hint.classList.remove('hidden');
+    }
+  }
+
+  ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((eventName) => {
+    document.addEventListener(eventName, syncFullscreenHint);
+  });
+
+  window.addEventListener('resize', syncFullscreenHint);
+  window.addEventListener('orientationchange', syncFullscreenHint);
+
   initLanguage();
+
+  syncFullscreenHint();
 
   function startButtonCountdown(id, renderLabel) {
     const btn = $(id);
@@ -1699,9 +1763,17 @@
     if (joinView) joinView.style.display = "none";
     if ($("gameView")) $("gameView").style.display = "";
     if ($("side")) $("side").style.display = "";
+    const statsBtn = $("btnStats");
+    const devBtn = $("btnDevInfo");
+    if (statsBtn) statsBtn.style.display = "";
+    if (devBtn) devBtn.style.display = "";
   }
 
   function showJoinView() {
+    if (!state.joinBackgroundUrl) {
+      state.joinBackgroundUrl = pickJoinBackground();
+    }
+    applyJoinBackground(state.joinBackgroundUrl);
     if (document && document.body) document.body.classList.add('join-screen');
     const joinView = $("joinView");
     if (joinView) {
@@ -1717,6 +1789,10 @@
     }
     if ($("gameView")) $("gameView").style.display = "none";
     if ($("side")) $("side").style.display = "none";
+    const statsBtn = $("btnStats");
+    const devBtn = $("btnDevInfo");
+    if (statsBtn) statsBtn.style.display = "none";
+    if (devBtn) devBtn.style.display = "none";
     initJoinDrag();
     syncJoinViewModalVisibility();
   }
@@ -1841,56 +1917,344 @@
     window.addEventListener('resize', ensureWithinBounds);
   }
 
-  function populateList(listEl, items, renderItem, emptyMessage) {
+  function normalizeKeyPart(value) {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return String(value).trim();
+  }
+
+  function abilityKey(ability) {
+    if (!ability || typeof ability !== 'object') {
+      return `raw:${normalizeKeyPart(ability)}`;
+    }
+    const name = normalizeKeyPart(ability.n);
+    const extra = normalizeKeyPart(ability.x);
+    return `n:${name}|x:${extra}`;
+  }
+
+  function textEntryKey(value) {
+    return `text:${normalizeKeyPart(value)}`;
+  }
+
+  function resetHighlightBucket(mapRef) {
+    if (mapRef && mapRef instanceof Map) {
+      mapRef.clear();
+      return mapRef;
+    }
+    return new Map();
+  }
+
+  function ensureHighlightStateTurn(turn) {
+    const current = Number.isFinite(turn) ? turn : 0;
+    if (!state.youHighlights || typeof state.youHighlights !== 'object') {
+      state.youHighlights = {
+        turn: current,
+        abilities: new Map(),
+        inventory: new Map(),
+        conditions: new Map(),
+      };
+      return state.youHighlights;
+    }
+    const highlights = state.youHighlights;
+    if (highlights.turn !== current) {
+      highlights.turn = current;
+      highlights.abilities = resetHighlightBucket(highlights.abilities);
+      highlights.inventory = resetHighlightBucket(highlights.inventory);
+      highlights.conditions = resetHighlightBucket(highlights.conditions);
+    } else {
+      if (!(highlights.abilities instanceof Map)) highlights.abilities = new Map();
+      if (!(highlights.inventory instanceof Map)) highlights.inventory = new Map();
+      if (!(highlights.conditions instanceof Map)) highlights.conditions = new Map();
+    }
+    return highlights;
+  }
+
+  function mergeHighlightCounts(target, additions) {
+    if (!(target instanceof Map) || !(additions instanceof Map)) return;
+    additions.forEach((count, key) => {
+      if (!key || !Number.isFinite(count) || count <= 0) return;
+      target.set(key, (target.get(key) || 0) + count);
+    });
+  }
+
+  function cloneHighlightMap(source) {
+    if (!(source instanceof Map) || source.size === 0) return null;
+    return new Map(source);
+  }
+
+  function computeAddedCounts(previousItems, nextItems, keyFn) {
+    if (!Array.isArray(nextItems) || typeof keyFn !== 'function') {
+      return new Map();
+    }
+    const prevCounts = new Map();
+    if (Array.isArray(previousItems)) {
+      previousItems.forEach((item) => {
+        const key = keyFn(item);
+        if (!key) return;
+        prevCounts.set(key, (prevCounts.get(key) || 0) + 1);
+      });
+    }
+    const addedCounts = new Map();
+    nextItems.forEach((item) => {
+      const key = keyFn(item);
+      if (!key) return;
+      const prevCount = prevCounts.get(key) || 0;
+      if (prevCount > 0) {
+        prevCounts.set(key, prevCount - 1);
+      } else {
+        addedCounts.set(key, (addedCounts.get(key) || 0) + 1);
+      }
+    });
+    return addedCounts;
+  }
+
+  function createHighlightConsumer(addedCounts) {
+    if (!(addedCounts instanceof Map) || addedCounts.size === 0) {
+      return null;
+    }
+    return (key) => {
+      if (!key) return false;
+      const count = addedCounts.get(key);
+      if (!count) return false;
+      if (count <= 1) {
+        addedCounts.delete(key);
+      } else {
+        addedCounts.set(key, count - 1);
+      }
+      return true;
+    };
+  }
+
+  function ensureRemovalStateTurn(turn) {
+    const current = Number.isFinite(turn) ? turn : 0;
+    if (!state.youRemovals || typeof state.youRemovals !== 'object') {
+      state.youRemovals = {
+        turn: current,
+        abilities: new Map(),
+        inventory: new Map(),
+        conditions: new Map(),
+      };
+      return state.youRemovals;
+    }
+    const removals = state.youRemovals;
+    if (removals.turn !== current) {
+      removals.turn = current;
+      removals.abilities = resetHighlightBucket(removals.abilities);
+      removals.inventory = resetHighlightBucket(removals.inventory);
+      removals.conditions = resetHighlightBucket(removals.conditions);
+    } else {
+      if (!(removals.abilities instanceof Map)) removals.abilities = new Map();
+      if (!(removals.inventory instanceof Map)) removals.inventory = new Map();
+      if (!(removals.conditions instanceof Map)) removals.conditions = new Map();
+    }
+    return removals;
+  }
+
+  function pruneRemovalEntries(target, currentItems, keyFn) {
+    if (!(target instanceof Map) || typeof keyFn !== 'function') return;
+    if (!Array.isArray(currentItems) || currentItems.length === 0) return;
+    const currentCounts = new Map();
+    currentItems.forEach((item) => {
+      const key = keyFn(item);
+      if (!key) return;
+      currentCounts.set(key, (currentCounts.get(key) || 0) + 1);
+    });
+    target.forEach((data, key) => {
+      if (!data || typeof data.count !== 'number') {
+        target.delete(key);
+        return;
+      }
+      const currentCount = currentCounts.get(key) || 0;
+      if (currentCount <= 0) return;
+      if (currentCount >= data.count) {
+        target.delete(key);
+      } else {
+        data.count -= currentCount;
+        target.set(key, data);
+      }
+    });
+  }
+
+  function mergeRemovalEntries(target, additions) {
+    if (!(target instanceof Map) || !(additions instanceof Map)) return;
+    additions.forEach((data, key) => {
+      if (!key || !data || typeof data.count !== 'number' || data.count <= 0) return;
+      const existing = target.get(key);
+      if (existing && typeof existing.count === 'number') {
+        existing.count += data.count;
+        existing.item = data.item;
+        target.set(key, existing);
+      } else {
+        target.set(key, { count: data.count, item: data.item });
+      }
+    });
+  }
+
+  function cloneRemovalEntries(source) {
+    if (!(source instanceof Map) || source.size === 0) return null;
+    return Array.from(source.entries()).map(([key, data]) => ({
+      key,
+      count: typeof data.count === 'number' && data.count > 0 ? data.count : 1,
+      item: data.item,
+    }));
+  }
+
+  function computeRemovedEntries(previousItems, nextItems, keyFn) {
+    if (!Array.isArray(previousItems) || typeof keyFn !== 'function') {
+      return new Map();
+    }
+    const nextCounts = new Map();
+    if (Array.isArray(nextItems)) {
+      nextItems.forEach((item) => {
+        const key = keyFn(item);
+        if (!key) return;
+        nextCounts.set(key, (nextCounts.get(key) || 0) + 1);
+      });
+    }
+    const removed = new Map();
+    previousItems.forEach((item) => {
+      const key = keyFn(item);
+      if (!key) return;
+      const remaining = nextCounts.get(key) || 0;
+      if (remaining > 0) {
+        nextCounts.set(key, remaining - 1);
+        return;
+      }
+      const existing = removed.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        removed.set(key, { count: 1, item });
+      }
+    });
+    return removed;
+  }
+
+  function formatAbilityText(ability) {
+    const baseName = ability && ability.n ? ability.n : t('game.ability.unnamed');
+    const detail = ability && ability.x ? ` (${ability.x})` : '';
+    return `${baseName}${detail}`;
+  }
+
+  function formatInventoryText(item) {
+    return item || t('game.inventory.unnamed');
+  }
+
+  function formatConditionText(condition) {
+    return condition || t('game.condition.unnamed');
+  }
+
+  function populateList(listEl, items, renderItem, emptyMessage, options = {}) {
     if (!listEl) return;
     listEl.innerHTML = "";
     const entries = Array.isArray(items) ? items : [];
-    if (!entries.length) {
+    const extraEntries = Array.isArray(options.extraEntries) ? options.extraEntries : [];
+    if (!entries.length && !extraEntries.length) {
       const empty = document.createElement("li");
       empty.className = "list-note";
       empty.textContent = emptyMessage;
       listEl.appendChild(empty);
       return;
     }
+    const keyFor = typeof options.keyFor === 'function' ? options.keyFor : null;
+    const consumeHighlight = typeof options.consumeHighlight === 'function' ? options.consumeHighlight : null;
+    const highlightClass = options.highlightClass || 'list-added';
     entries.forEach((entry) => {
       const li = document.createElement("li");
       renderItem(li, entry);
+      if (keyFor && consumeHighlight) {
+        const key = keyFor(entry);
+        if (consumeHighlight(key)) {
+          li.classList.add(highlightClass);
+        }
+      }
       listEl.appendChild(li);
     });
+    if (extraEntries.length && typeof options.renderExtraEntry === 'function') {
+      extraEntries.forEach((entry) => {
+        const li = document.createElement("li");
+        options.renderExtraEntry(li, entry);
+        listEl.appendChild(li);
+      });
+    }
   }
 
-  function renderAbilityList(listEl, abilities) {
+  function renderAbilityList(listEl, abilities, addedCounts = null, removedEntries = null) {
+    const consumeHighlight = createHighlightConsumer(addedCounts);
+    const extras = Array.isArray(removedEntries) ? removedEntries : [];
     populateList(
       listEl,
       abilities,
       (li, ability) => {
-        const baseName = ability && ability.n ? ability.n : t('game.ability.unnamed');
-        const detail = ability && ability.x ? ` (${ability.x})` : '';
-        li.textContent = `${baseName}${detail}`;
+        li.textContent = formatAbilityText(ability);
       },
-      t('game.noAbility')
+      t('game.noAbility'),
+      {
+        keyFor: abilityKey,
+        consumeHighlight,
+        extraEntries: extras,
+        renderExtraEntry: (li, entry) => {
+          const ability = entry ? entry.item : null;
+          const baseText = formatAbilityText(ability);
+          const count = entry && Number.isFinite(entry.count) ? entry.count : 1;
+          li.textContent = count > 1 ? `${baseText} x${count}` : baseText;
+          li.classList.add('list-removed');
+        },
+      }
     );
   }
 
-  function renderInventoryList(listEl, items) {
+  function renderInventoryList(listEl, items, addedCounts = null, removedEntries = null) {
+    const consumeHighlight = createHighlightConsumer(addedCounts);
+    const extras = Array.isArray(removedEntries) ? removedEntries : [];
     populateList(
       listEl,
       items,
       (li, item) => {
-        li.textContent = item || t('game.inventory.unnamed');
+        li.textContent = formatInventoryText(item);
       },
-      t('game.noInventory')
+      t('game.noInventory'),
+      {
+        keyFor: textEntryKey,
+        consumeHighlight,
+        extraEntries: extras,
+        renderExtraEntry: (li, entry) => {
+          const value = entry ? entry.item : null;
+          const baseText = formatInventoryText(value);
+          const count = entry && Number.isFinite(entry.count) ? entry.count : 1;
+          li.textContent = count > 1 ? `${baseText} x${count}` : baseText;
+          li.classList.add('list-removed');
+        },
+      }
     );
   }
 
-  function renderConditionList(listEl, conditions) {
+  function renderConditionList(listEl, conditions, addedCounts = null, removedEntries = null) {
+    const consumeHighlight = createHighlightConsumer(addedCounts);
+    const extras = Array.isArray(removedEntries) ? removedEntries : [];
     populateList(
       listEl,
       conditions,
       (li, condition) => {
-        li.textContent = condition || t('game.condition.unnamed');
+        li.textContent = formatConditionText(condition);
       },
-      t('game.noCondition')
+      t('game.noCondition'),
+      {
+        keyFor: textEntryKey,
+        consumeHighlight,
+        extraEntries: extras,
+        renderExtraEntry: (li, entry) => {
+          const value = entry ? entry.item : null;
+          const baseText = formatConditionText(value);
+          const count = entry && Number.isFinite(entry.count) ? entry.count : 1;
+          li.textContent = count > 1 ? `${baseText} x${count}` : baseText;
+          li.classList.add('list-removed');
+        },
+      }
     );
   }
 
@@ -1907,6 +2271,18 @@
     renderInventoryList(youInv, []);
     renderConditionList(youCond, []);
     state.lastPrivate = null;
+    if (state.youHighlights && typeof state.youHighlights === 'object') {
+      state.youHighlights.abilities = resetHighlightBucket(state.youHighlights.abilities);
+      state.youHighlights.inventory = resetHighlightBucket(state.youHighlights.inventory);
+      state.youHighlights.conditions = resetHighlightBucket(state.youHighlights.conditions);
+      state.youHighlights.turn = Number.isFinite(state.currentTurn) ? state.currentTurn : 0;
+    }
+    if (state.youRemovals && typeof state.youRemovals === 'object') {
+      state.youRemovals.abilities = resetHighlightBucket(state.youRemovals.abilities);
+      state.youRemovals.inventory = resetHighlightBucket(state.youRemovals.inventory);
+      state.youRemovals.conditions = resetHighlightBucket(state.youRemovals.conditions);
+      state.youRemovals.turn = Number.isFinite(state.currentTurn) ? state.currentTurn : 0;
+    }
   }
 
   function expireSession(message, options = {}) {
@@ -2917,6 +3293,15 @@
     return text ? text : t('devInfo.empty');
   }
 
+  // Developer info should surface just the parsed API JSON payload
+  function extractResponseJson(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return null;
+    if (Object.prototype.hasOwnProperty.call(snapshot, 'json')) {
+      return snapshot.json;
+    }
+    return null;
+  }
+
   function renderDeveloperInfoModal(payload) {
     const historyMode = String(((payload && payload.history_mode) || 'full')).toLowerCase();
     const includeScenario = historyMode === 'summary';
@@ -2969,8 +3354,8 @@
 
     assignBlock(
       $("devInfoResponse"),
-      payload && payload.response,
-      payload && payload.scenario_response,
+      extractResponseJson(payload && payload.response),
+      extractResponseJson(payload && payload.scenario_response),
       includeScenario ? 'devInfo.summaryResponseHeading' : null,
       includeScenario ? 'devInfo.scenarioResponseHeading' : null
     );
@@ -3084,21 +3469,14 @@
   }
 
   // Join
+  const enterButton = $("btnEnter");
   const joinNameInput = $("name");
   const joinBackgroundInput = $("background");
-  if (joinNameInput) {
-    joinNameInput.addEventListener("input", () => {
-      rememberJoinInputs(joinNameInput.value, joinBackgroundInput ? joinBackgroundInput.value : "");
-    });
-  }
-  if (joinBackgroundInput) {
-    joinBackgroundInput.addEventListener("input", () => {
-      rememberJoinInputs(joinNameInput ? joinNameInput.value : "", joinBackgroundInput.value);
-    });
-  }
-  $("btnEnter").onclick = async () => {
-    const nameVal = $("name").value || "Hephaest";
-    const backgroundVal = $("background").value || "Wizard";
+  const submitJoin = async () => {
+    const rawName = joinNameInput ? joinNameInput.value : "";
+    const rawBackground = joinBackgroundInput ? joinBackgroundInput.value : "";
+    const nameVal = rawName || "Hephaest";
+    const backgroundVal = rawBackground || "Wizard";
     rememberJoinInputs(nameVal, backgroundVal);
     setJoinWaiting(true);
     startButtonCountdown('btnEnter', (seconds) => t('join.countdown', { seconds }));
@@ -3142,6 +3520,27 @@
     showJoinView();
     connectWS();
   };
+  if (joinNameInput) {
+    joinNameInput.addEventListener("input", () => {
+      rememberJoinInputs(joinNameInput.value, joinBackgroundInput ? joinBackgroundInput.value : "");
+    });
+  }
+  if (joinBackgroundInput) {
+    joinBackgroundInput.addEventListener("input", () => {
+      rememberJoinInputs(joinNameInput ? joinNameInput.value : "", joinBackgroundInput.value);
+    });
+    joinBackgroundInput.addEventListener("keydown", async (ev) => {
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+        ev.preventDefault();
+        if (enterButton && !enterButton.disabled) {
+          await submitJoin();
+        }
+      }
+    });
+  }
+  if (enterButton) {
+    enterButton.addEventListener("click", submitJoin);
+  }
 
   // Actions
   const actionBox = $("action");
@@ -3561,9 +3960,39 @@
     const y = data && data.you ? data.you : {};
     if (!y || !y.id) {
       state.lastPrivate = null;
+      if (state.youHighlights && typeof state.youHighlights === 'object') {
+        state.youHighlights.abilities = resetHighlightBucket(state.youHighlights.abilities);
+        state.youHighlights.inventory = resetHighlightBucket(state.youHighlights.inventory);
+        state.youHighlights.conditions = resetHighlightBucket(state.youHighlights.conditions);
+        state.youHighlights.turn = Number.isFinite(state.currentTurn) ? state.currentTurn : 0;
+      }
+      if (state.youRemovals && typeof state.youRemovals === 'object') {
+        state.youRemovals.abilities = resetHighlightBucket(state.youRemovals.abilities);
+        state.youRemovals.inventory = resetHighlightBucket(state.youRemovals.inventory);
+        state.youRemovals.conditions = resetHighlightBucket(state.youRemovals.conditions);
+        state.youRemovals.turn = Number.isFinite(state.currentTurn) ? state.currentTurn : 0;
+      }
       return;
     }
-    state.lastPrivate = data;
+    const highlights = ensureHighlightStateTurn(state.currentTurn);
+    const removals = ensureRemovalStateTurn(state.currentTurn);
+    pruneRemovalEntries(removals.abilities, y.abilities, abilityKey);
+    pruneRemovalEntries(removals.inventory, y.inventory, textEntryKey);
+    pruneRemovalEntries(removals.conditions, y.conditions, textEntryKey);
+    const prevPrivate = state.lastPrivate;
+    const prevYou = prevPrivate && prevPrivate.you ? prevPrivate.you : null;
+    const abilityAdds = prevYou ? computeAddedCounts(prevYou.abilities, y.abilities, abilityKey) : new Map();
+    const inventoryAdds = prevYou ? computeAddedCounts(prevYou.inventory, y.inventory, textEntryKey) : new Map();
+    const conditionAdds = prevYou ? computeAddedCounts(prevYou.conditions, y.conditions, textEntryKey) : new Map();
+    const abilityRemoved = prevYou ? computeRemovedEntries(prevYou.abilities, y.abilities, abilityKey) : new Map();
+    const inventoryRemoved = prevYou ? computeRemovedEntries(prevYou.inventory, y.inventory, textEntryKey) : new Map();
+    const conditionRemoved = prevYou ? computeRemovedEntries(prevYou.conditions, y.conditions, textEntryKey) : new Map();
+    mergeHighlightCounts(highlights.abilities, abilityAdds);
+    mergeHighlightCounts(highlights.inventory, inventoryAdds);
+    mergeHighlightCounts(highlights.conditions, conditionAdds);
+    mergeRemovalEntries(removals.abilities, abilityRemoved);
+    mergeRemovalEntries(removals.inventory, inventoryRemoved);
+    mergeRemovalEntries(removals.conditions, conditionRemoved);
     if (!state.playerId) {
       state.playerId = y.id;
       syncNarrationToggle(state.autoTtsEnabled);
@@ -3593,9 +4022,10 @@
         youFlags.style.display = "flex";
       }
     }
-    renderAbilityList($("youAbilities"), y.abilities);
-    renderInventoryList($("youInv"), y.inventory);
-    renderConditionList($("youCond"), y.conditions);
+    renderAbilityList($("youAbilities"), y.abilities, cloneHighlightMap(highlights.abilities), cloneRemovalEntries(removals.abilities));
+    renderInventoryList($("youInv"), y.inventory, cloneHighlightMap(highlights.inventory), cloneRemovalEntries(removals.inventory));
+    renderConditionList($("youCond"), y.conditions, cloneHighlightMap(highlights.conditions), cloneRemovalEntries(removals.conditions));
+    state.lastPrivate = data;
   }
 
   function updateStats(usage) {
@@ -3948,6 +4378,8 @@
   enablePaneReorder();
 
   function initClient() {
+    state.joinBackgroundUrl = pickJoinBackground();
+    applyJoinBackground(state.joinBackgroundUrl);
     showJoinView();
     setJoinWaiting(false);
     updateJoinStatus("");
