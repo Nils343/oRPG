@@ -1,0 +1,29 @@
+{
+  "name": "orpg",
+  "version": "1.0.0",
+  "description": "A LAN-friendly multiplayer tabletop RPG host built on FastAPI, WebSockets, and structured LLM calls. oRPG keeps a shared world state, lets players join from a browser, and can enrich every turn with auto-generated images, voice narration, and concise history summaries. It currently supports Google Gemini, OpenAI, and xAI Grok text models plus optional ElevenLabs speech synthesis.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nils343/oRPG.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Nils343/oRPG/issues"
+  },
+  "homepage": "https://github.com/Nils343/oRPG#readme",
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "jsdom": "^27.0.0",
+    "vitest": "^3.2.4"
+  }
+}

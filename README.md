@@ -5,8 +5,10 @@ A LAN-friendly multiplayer tabletop RPG host built on FastAPI, WebSockets, and s
 ## Highlights
 - Real-time lobby and turn engine served from `static/index.html`; players join, submit actions, and watch turns resolve over WebSockets.
 - Structured JSON contracts keep characters, inventories, and public status words consistent across turns.
-- Multi-provider text engine: drop in a Gemini, OpenAI, or Grok model name and the server selects the right API key automatically.
+- Multi-provider text engine: drop in a Gemini, OpenAI, or Grok model name and the server rotates between players' matching API keys automatically.
+- Per-player API keys: each player can supply their own provider keys so text, image, and narration costs are shared evenly.
 - Optional scene art and portrait generation via Gemini image models, including auto-on-turn toggles and per-player portrait refresh.
+- Optional scene video generation via Veo models: the GM produces both an image prompt and a video prompt each turn; when animating, the server prefers the dedicated video prompt.
 - ElevenLabs narration integration with automatic queuing, error reporting, and cost tracking for spoken turns.
 - English and German language modes with localized UI strings, GM prompt templates, and rules for the structured responses.
 - History can be kept verbatim or condensed into short bullet summaries to manage context windows; both are surfaced to players.
@@ -14,12 +16,10 @@ A LAN-friendly multiplayer tabletop RPG host built on FastAPI, WebSockets, and s
 
 ## Requirements
 - Python 3.11+ (the codebase relies on modern type hints and `asyncio` features).
-- A Google Gemini API key if you intend to use Gemini text or image models.
-- An OpenAI API key if you want to call GPT-4o, GPT-4.1, o1, or other OpenAI text models.
-- An xAI Grok API key if you prefer Grok models for structured text.
-- An ElevenLabs API key if you want automatic narration (optional).
-
-All keys are stored locally in `settings.json`, which stays ignored by git.
+- At least one player-provided Google Gemini API key if you intend to use Gemini text or image models.
+- At least one player-provided OpenAI API key if you want to call GPT-4o, GPT-4.1, o1, or other OpenAI text models.
+- At least one player-provided xAI Grok API key if you prefer Grok models for structured text.
+- An ElevenLabs API key from any player if you want automatic narration (optional).
 
 ## Setup
 ```bash
@@ -28,17 +28,14 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-On first launch the server will create `settings.json` with sane defaults. Populate the fields you plan to use before inviting players.
+On first launch the server will create `settings.json` with sane defaults for world settings (no API keys are stored there).
 
 ## Configuration (`settings.json`)
 | Key | Purpose |
 | --- | ------- |
-| `api_key` | Google Gemini API key used for Gemini text/image calls. |
-| `grok_api_key` | xAI Grok API key; required when `text_model` targets Grok. |
-| `openai_api_key` | OpenAI API key; required when `text_model` targets OpenAI models such as `gpt-4o`. |
-| `elevenlabs_api_key` | ElevenLabs key for narration; required before enabling auto-TTS. |
-| `text_model` | Structured text model (e.g. `gemini-2.0-flash`, `gpt-4o-mini`, `grok-4-fast-non-reasoning`). Provider is auto-detected. |
+| `text_model` | Structured text model (e.g. `gemini-2.0-flash`, `gpt-4o-mini`, `grok-4-fast-non-reasoning`). Provider is auto-detected and must have at least one matching player key. |
 | `image_model` | Gemini image model for scene and portrait generation. |
+| `video_model` | Veo text-to-video model for scene animation. |
 | `narration_model` | ElevenLabs model/voice to narrate turns. |
 | `world_style` | Flavour string shown in the UI and injected into prompts. |
 | `difficulty` | Narrative difficulty cue sent to the GM model. |
@@ -77,19 +74,24 @@ Switching to `history_mode: "summary"` keeps only a rolling bullet chronicle so 
 ## Media & Narration
 - **Scene Images**: Toggle auto-generation in the UI or trigger manually with **Create Image**. Prompts merge the model’s response with saved portraits and status cues.
 - **Portraits**: Players can request fresh portraits based on their current class/conditions via **Create Portrait**.
+- **Scene Video**: Enable **Auto Animation** to generate a short Veo clip after each resolved turn (mutually exclusive with Auto Image). The per-turn structured response now includes a `vid` prompt that describes motion, camera, pacing, and sound; the server uses this when present (falling back to the `img` prompt), and a saved scene image is no longer required.
 - **Narration**: Enable auto narration once an ElevenLabs key/model is configured. The server queues narration jobs, streams errors to clients, and tracks remaining credits when provided by the API.
 
 All media toggles respect the global lock so narration and image requests never collide with turn resolution.
 
 ## Models & Cost Tracking
-`/api/models` returns the available Gemini, Grok, and ElevenLabs models (when their respective keys are present). oRPG records token usage per turn, updates aggregate session metrics, and estimates USD costs using `model_prices.json`. Adjust that file if pricing changes or you want to add custom tiers.
+`/api/models` returns the available Gemini, Grok, and ElevenLabs models for any configured player keys. `/api/player/models` mirrors this per authenticated player. oRPG records token usage per turn, updates aggregate session metrics, and estimates USD costs using `model_prices.json`. Adjust that file if pricing changes or you want to add custom tiers.
+
+### Per-player API keys & cost sharing
+
+Players can open **Settings → My API keys** to add or rotate their own Gemini, Grok, OpenAI, and ElevenLabs credentials. The server rotates requests between players with matching keys so text, image, and narration costs remain roughly even. If nobody has provided a key for a provider, requests against that provider are blocked (the very first turn included).
 
 ## API Surface
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | Serve the single-page application. |
 | `GET` | `/api/state` | Public snapshot (turn, scenario, players, submissions, stats). |
-| `GET` | `/api/settings` | Current settings (keys returned as stored). |
+| `GET` | `/api/settings` | Current non-secret settings for the session. |
 | `PUT` | `/api/settings` | Update settings and persist to disk. |
 | `GET` | `/api/models` | List text and narration models for configured providers. |
 | `GET` | `/api/public_url` | Provide a shareable host URL (falls back to placeholder). |
@@ -112,7 +114,7 @@ python -m pytest            # or python -m unittest
 Tests reset the global state between cases and mock model calls. During development, the **Dev Info** panel in the UI and `/api/dev/text_inspect` expose the latest prompts/responses to help tune templates.
 
 ## Deployment & Security Notes
-- Keep `settings.json` (`chmod 600`) and never commit keys. The project’s `.gitignore` already excludes it and `github_credentials.txt`.
+- Keep `settings.json` (`chmod 600`) if you customize it, but remember that API keys now live on individual players and should never be committed anywhere.
 - Run behind HTTPS and a reverse proxy when exposing the server to the internet.
 - Rotate all API keys promptly if the host machine is compromised.
 

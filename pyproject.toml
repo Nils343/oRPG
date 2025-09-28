@@ -1,0 +1,40 @@
+[project]
+name = "oRPG"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+    "generated_media",
+    "static",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.11"
+modules = ["scripts.compare_turn_costs", "rpg"]
+disallow_incomplete_defs = false
+check_untyped_defs = false
+follow_imports = "skip"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+no_implicit_optional = true
+ignore_missing_imports = true
+show_error_codes = true
+exclude = [
+    "generated_media",
+    "static",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[tool.bandit]
+skips = ["B101"]
+targets = ["rpg.py", "scripts", "tests"]

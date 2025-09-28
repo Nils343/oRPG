@@ -24,18 +24,24 @@
     background-repeat: no-repeat;
     background-attachment: fixed;
   }
-  header { display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; border-bottom:1px solid #222736; position: sticky; top:0; background: rgba(15,17,23,0.9); backdrop-filter: blur(6px); }
-  header h1 { margin:0; font-size: 18px; letter-spacing:.5px; }
+  body.join-screen #btnNextTurn { display: none; }
+  header { display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; padding: 12px 16px; border-bottom:1px solid #222736; position: sticky; top:0; background: rgba(15,17,23,0.9); backdrop-filter: blur(6px); column-gap:16px; }
+  header h1 { margin:0; font-size: 18px; letter-spacing:.5px; display:flex; align-items:center; gap:12px; }
+  .header-left { justify-self:start; }
+  .header-center, .header-right { display:flex; align-items:center; min-width:0; }
+  .header-center { justify-self:center; justify-content:center; gap:12px; }
+  .header-right { justify-self:end; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
+  .turn-display { font-size:14px; }
   button, select, input, textarea { background: var(--card); color: var(--fg); border:1px solid #262c3a; border-radius:8px; padding:8px 10px; }
   textarea { resize: vertical; }
   button { cursor:pointer; }
   button[disabled] { opacity:.5; cursor:not-allowed; }
   .wrap { display:flex; gap:16px; padding:16px; }
-  .col { display:flex; flex-direction:column; gap:16px; flex:1; min-width:280px; }
+  .col { display:flex; flex-direction:column; gap:16px; flex:1; min-width:280px; min-height:0; }
   .card { background: var(--card); border:1px solid #262c3a; border-radius:12px; padding:14px; }
   .card[draggable="true"] { cursor: grab; }
   .card.dragging { opacity: .6; }
-  .scenario-header { justify-content:space-between; margin-bottom:8px; }
+  .panel-header { justify-content:space-between; margin-bottom:8px; }
   .mini-toggle { font-size:12px; padding:4px 10px; border-radius:999px; line-height:1; border:1px solid #262c3a; background:var(--card); color:var(--muted); transition:color .2s ease, border-color .2s ease, background .2s ease; }
   .mini-toggle[aria-pressed="true"], .mini-toggle.active { color:var(--accent); border-color:var(--accent); background:rgba(122,162,247,0.14); }
   .mini-toggle:disabled { opacity:0.5; cursor:not-allowed; }
@@ -74,6 +80,8 @@
   .join-layout { flex:none; width: min(720px, 100%); position:absolute; top:8vh; left:50%; transform:translateX(-50%); z-index:20; }
   .join-layout.dragging { cursor:grabbing; }
   .join-card { position:relative; overflow:hidden; padding:26px; background:linear-gradient(165deg, rgba(22,26,34,0.94), rgba(16,20,28,0.98)); border:1px solid rgba(122,162,247,0.2); box-shadow:0 28px 50px rgba(4,6,12,0.55); backdrop-filter: blur(12px); display:flex; flex-direction:column; gap:24px; border-radius:18px; }
+  .join-card-link { position:absolute; top:10px; right:14px; font-size:10px; color:var(--muted); text-decoration:none; letter-spacing:0.3px; opacity:0.8; }
+  .join-card-link:hover, .join-card-link:focus-visible { color:var(--accent2); opacity:1; text-decoration:underline; outline:none; }
   .join-card::before { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; border:1px solid rgba(137,220,235,0.25); opacity:0.35; }
   .join-card-header { display:flex; gap:18px; align-items:flex-start; cursor:grab; user-select:none; touch-action:none; }
   .join-layout.dragging .join-card-header { cursor:grabbing; }
@@ -104,11 +112,21 @@
   .row { display:flex; gap:10px; align-items:center; }
   .fullscreen-hint { font-size:11px; color:var(--muted); white-space:pre-line; margin-left:4px; line-height:1.2; }
   .right { margin-left:auto; }
-  #scenario { white-space:pre-wrap; line-height:1.4; overflow-y:auto; max-height:60vh; padding-right:6px; }
-  .scenario-block { white-space:pre-wrap; margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid rgba(122,162,247,0.2); }
-  .scenario-block:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
+  .card[data-pane-id="narrative"] { display:flex; flex-direction:column; }
+  #narrative {
+    /* Narrative auto-height: fill column while keeping 6 lines minimum */
+    white-space:pre-wrap;
+    line-height:1.4;
+    overflow-y:auto;
+    padding-right:6px;
+    max-height:none;
+    min-height:calc(6lh);
+    flex:1 1 auto;
+  }
+  .narrative-block { white-space:pre-wrap; margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid rgba(122,162,247,0.2); }
+  .narrative-block:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
   @keyframes blinkCursor { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
-  #players li { display:flex; align-items:center; gap:12px; padding:6px 0; border-bottom:1px dashed #222736; }
+  #players li { display:flex; align-items:flex-start; gap:12px; padding:6px 0; border-bottom:1px dashed #222736; }
   #players li:last-child { border-bottom: none; }
   .player-main { display:flex; align-items:center; gap:12px; flex:1; min-width:0; }
   .player-portrait { width:40px; height:40px; border-radius:10px; border:1px solid #283048; background:#131722; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; color: var(--muted); overflow:hidden; cursor:pointer; padding:0; transition: border-color .2s ease, color .2s ease; }
@@ -125,10 +143,14 @@
   .stack { display:flex; flex-direction:column; gap:8px; }
   .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
   img#scene { width:100%; border-radius:10px; border:1px solid #262c3a; }
+  video#sceneVideo { width:100%; border-radius:10px; border:1px solid #262c3a; background:#000; }
+  .scene-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   .player-name { display:flex; flex-direction:column; gap:4px; min-width:0; }
-  .player-name-row { display:flex; align-items:center; gap:8px; min-width:0; }
+  .player-name-row { display:flex; align-items:flex-start; gap:8px; min-width:0; }
   .player-name-main { font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .player-class { font-size: 13px; color: var(--muted); }
+  .player-action { flex:1; min-width:0; font-size:13px; color: var(--muted); margin-left:8px; overflow-wrap:anywhere; }
+  .player-action.has-submission { color: var(--fg); }
   .player-tags { display:flex; flex-wrap:wrap; gap:6px; }
   .list-note { list-style:none; font-size:12px; color: var(--muted); padding-left:0; margin-left:0; }
   .list-note::marker { content:""; }
@@ -183,8 +205,13 @@
 </head>
 <body>
 <header>
-  <h1>Nils&#39; RPG <span id="turnHeader" class="muted" style="font-size:14px; margin-left:12px;">Turn 0</span></h1>
-  <div class="row">
+  <div class="header-left">
+    <h1>Nils&#39; RPG <span id="turnHeader" class="turn-display muted">Turn 0</span></h1>
+  </div>
+  <div class="header-center">
+    <button id="btnNextTurn" data-i18n="game.nextTurn">Next turn</button>
+  </div>
+  <div class="header-right">
     <span id="lockBanner" class="muted"></span>
     <button id="btnStats" data-i18n="header.stats">Statistics</button>
     <button id="btnDevInfo" data-i18n="header.devInfo">Developer info</button>
@@ -204,6 +231,7 @@ F11</span>
   <!-- Join screen -->
   <section id="joinView" class="col join-layout">
     <div class="card join-card">
+      <a class="join-card-link" href="https://suno.com/s/CTdevHgPjlr6LIdv" target="_blank" rel="noopener noreferrer">Song by Suno</a>
       <div class="join-card-header">
         <div class="join-emblem" aria-hidden="true"></div>
         <div>
@@ -230,43 +258,11 @@ F11</span>
 
   <!-- Game screen -->
   <section id="gameView" class="col" data-pane-group="main" style="display:none">
-    <div class="card" data-pane-id="scenario">
-      <div class="row scenario-header">
-        <h3 style="margin:0" data-i18n="game.scenario">Scenario</h3>
-        <button id="btnNarration" type="button" class="mini-toggle" aria-pressed="false" title="Toggle ElevenLabs narration" data-i18n="game.narrateOff">Narrate Off</button>
-      </div>
-      <div id="scenario" class="muted">Waiting…</div>
-    </div>
-
-    <div class="card" data-pane-id="actions">
-      <h3 style="margin:0 0 8px 0" data-i18n="game.actions">Actions</h3>
-      <div class="stack">
-        <textarea id="action" rows="3" placeholder="What do you attempt to do?" data-i18n-attr="placeholder:game.actionPlaceholder"></textarea>
-        <div class="row">
-          <button id="btnSubmit" data-i18n="game.submit">Submit</button>
-          <button id="btnNextTurn" class="right" data-i18n="game.nextTurn">Next turn</button>
-        </div>
-        <div>
-          <h4 class="muted" data-i18n="game.submissionsHeading">This turn's submissions</h4>
-          <ul id="submissions" class="stack" style="margin:0; padding-left:18px"></ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Sidebar -->
-  <aside id="side" class="col" data-pane-group="sidebar" style="display:none">
-    <div class="card" data-pane-id="scene">
-      <div class="row scenario-header scene-header">
-        <h3 style="margin:0" data-i18n="sidebar.sceneImage">Scene image</h3>
-        <button id="btnCreateImage" type="button" class="mini-toggle" aria-pressed="false" title="Enable automatic scene images" data-i18n="sidebar.autoImageOff">Auto Image Off</button>
-      </div>
-      <img id="scene" style="display:none" title="" />
-    </div>
     <div class="card" data-pane-id="players">
       <h3 style="margin:0 0 8px 0" data-i18n="sidebar.players">Players</h3>
       <ul id="players" style="list-style:none; padding:0; margin:0"></ul>
     </div>
+
     <div class="card" data-pane-id="character">
       <h3 style="margin:0 0 8px 0" data-i18n="sidebar.yourCharacter">Your character</h3>
       <div id="you" class="stack">
@@ -286,6 +282,38 @@ F11</span>
           <ul id="youCond" style="margin:0; padding-left:18px"></ul>
         </div>
       </div>
+    </div>
+
+    <div class="card" data-pane-id="narrative">
+      <div class="row panel-header">
+        <h3 style="margin:0" data-i18n="game.narrative">Narrative</h3>
+        <button id="btnNarration" type="button" class="mini-toggle" aria-pressed="false" title="Toggle ElevenLabs narration" data-i18n="game.narrateOff">Narrate Off</button>
+      </div>
+      <div id="narrative" class="muted">Waiting…</div>
+    </div>
+
+    <div class="card" data-pane-id="actions">
+      <h3 style="margin:0 0 8px 0" data-i18n="game.actions">Actions</h3>
+      <div class="stack">
+        <textarea id="action" rows="3" placeholder="What do you attempt to do?" data-i18n-attr="placeholder:game.actionPlaceholder"></textarea>
+        <button id="btnSubmit" hidden aria-hidden="true" tabindex="-1" data-i18n="game.submit">Submit</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sidebar -->
+  <aside id="side" class="col" data-pane-group="sidebar" style="display:none">
+    <div class="card" data-pane-id="scene">
+      <div class="row panel-header scene-header">
+        <h3 style="margin:0" data-i18n="sidebar.sceneImage">Scene image</h3>
+        <div class="scene-actions">
+          <button id="btnCreateImage" type="button" class="mini-toggle" aria-pressed="false" title="Enable automatic scene images" data-i18n="sidebar.autoImageOff">Auto Image Off</button>
+          <button id="btnAnimateImage" type="button" class="mini-toggle hidden" title="Animate the current scene image" data-i18n="sidebar.animateImage" data-i18n-attr="title:sidebar.animateImageTitle">Animate Image</button>
+          <button id="btnAnimateScene" type="button" class="mini-toggle" aria-pressed="false" title="Enable automatic scene animations" data-i18n="sidebar.autoVideoOff">Auto Animation Off</button>
+        </div>
+      </div>
+      <video id="sceneVideo" class="hidden" preload="metadata" playsinline loop controls autoplay></video>
+      <img id="scene" style="display:none" title="" />
     </div>
   </aside>
 </main>
@@ -343,6 +371,10 @@ F11</span>
           <label>
             <span data-i18n="settings.imageModel.label">Image model</span>
             <select id="setImageModel"></select>
+          </label>
+          <label>
+            <span data-i18n="settings.videoModel.label">Video model</span>
+            <select id="setVideoModel"></select>
           </label>
           <label>
             <span data-i18n="settings.narrationModel.label">Narration model</span>
@@ -416,6 +448,7 @@ F11</span>
     <div class="stats-actions">
       <button id="btnStatsText" data-i18n="stats.main.textDetails">Text details</button>
       <button id="btnStatsImage" data-i18n="stats.main.imageDetails">Image details</button>
+      <button id="btnStatsVideo" data-i18n="stats.main.videoDetails">Video details</button>
       <button id="btnStatsNarration" data-i18n="stats.main.narrationDetails">Narration details</button>
     </div>
     <div class="tip" data-i18n="stats.main.tip">Open a category to see token and cost breakdowns.</div>
@@ -509,6 +542,56 @@ F11</span>
     <div class="tip" data-i18n="stats.image.tip">Image pricing uses Gemini per-image rates (standard tier).</div>
     <div class="row" style="margin-top:12px">
         <button id="btnCloseStatsImage" class="right" data-i18n="stats.shared.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="statsVideoBack" class="modalBack">
+  <div class="modal">
+    <h3 data-i18n="stats.video.title">Video usage details</h3>
+    <div class="stats-summary">
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.video.turnCost">This Turn Video Cost</span>
+        <span id="statsVideoCostLast" class="stat-chip-value">—</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label" data-i18n="stats.video.sessionCost">Session Video Cost</span>
+        <span id="statsVideoCostSession" class="stat-chip-value">—</span>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.lastModel">Last Video Model</span>
+        <span id="statsVideoModel" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.lastSeconds">Last Video Duration (seconds)</span>
+        <span id="statsVideoSecondsLast" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.sessionSeconds">Session Video Duration</span>
+        <span id="statsVideoSecondsSession" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.usdPerSecond">USD per second</span>
+        <span id="statsVideoUsdPerSecond" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.avgUsdPerSecond">Average USD per second</span>
+        <span id="statsVideoAvgUsdPerSecond" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.requests">Session Requests</span>
+        <span id="statsVideoRequests" class="stat-value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label" data-i18n="stats.video.avgSecondsPerRequest">Average seconds per request</span>
+        <span id="statsVideoAvgSecondsPerRequest" class="stat-value">—</span>
+      </div>
+    </div>
+    <div class="tip" data-i18n="stats.video.tip">Video pricing uses Veo per-second rates for generated clips.</div>
+    <div class="row" style="margin-top:12px">
+        <button id="btnCloseStatsVideo" class="right" data-i18n="stats.shared.close">Close</button>
     </div>
   </div>
 </div>
@@ -627,7 +710,7 @@ F11</span>
 
   const $ = (id) => document.getElementById(id);
 
-  const JOIN_BACKGROUNDS = [
+  const JOIN_BACKGROUND_FALLBACKS = [
     "/static/img/ashen-citadel.png",
     "/static/img/crescent-gateway.png",
     "/static/img/dungeon-gate.png",
@@ -638,10 +721,386 @@ F11</span>
     "/static/img/verdant-gateway.png",
   ];
 
+  const joinBackgroundState = {
+    items: [],
+    fetchPromise: null,
+    hydrated: false,
+  };
+
+  function getJoinBackgroundPool() {
+    return joinBackgroundState.items.length ? joinBackgroundState.items : JOIN_BACKGROUND_FALLBACKS;
+  }
+
+  function loadJoinBackgrounds() {
+    if (joinBackgroundState.fetchPromise) return joinBackgroundState.fetchPromise;
+    const request = fetch('/api/join_backgrounds', { cache: 'no-store' })
+      .then((resp) => (resp && resp.ok ? resp.json() : { backgrounds: [] }))
+      .then((payload) => {
+        const backgrounds = payload && Array.isArray(payload.backgrounds) ? payload.backgrounds : [];
+        const sanitized = backgrounds
+          .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry) => entry.length > 0);
+        joinBackgroundState.items = sanitized;
+        const hasBackgrounds = sanitized.length > 0;
+        const shouldForce = hasBackgrounds && !joinBackgroundState.hydrated;
+        if (hasBackgrounds) {
+          joinBackgroundState.hydrated = true;
+        } else {
+          joinBackgroundState.hydrated = false;
+        }
+        ensureJoinBackgroundFromPool({ force: shouldForce });
+        return getJoinBackgroundPool();
+      })
+      .catch(() => getJoinBackgroundPool())
+      .finally(() => {
+        joinBackgroundState.fetchPromise = null;
+      });
+    joinBackgroundState.fetchPromise = request;
+    return request;
+  }
+
   function pickJoinBackground() {
-    if (!JOIN_BACKGROUNDS.length) return null;
-    const index = Math.floor(Math.random() * JOIN_BACKGROUNDS.length);
-    return JOIN_BACKGROUNDS[index];
+    const pool = getJoinBackgroundPool();
+    if (!pool.length) return null;
+    const index = Math.floor(Math.random() * pool.length);
+    return pool[index];
+  }
+
+  function shuffleList(items) {
+    const next = items.slice();
+    for (let i = next.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = next[i];
+      next[i] = next[j];
+      next[j] = tmp;
+    }
+    return next;
+  }
+
+  const joinMusicState = {
+    library: [],
+    queue: [],
+    audio: null,
+    unlockHandler: null,
+    fetchPromise: null,
+    fadeHandle: null,
+  };
+
+  const JOIN_MUSIC_DEFAULT_VOLUME = 0.55;
+  const JOIN_MUSIC_FADE_DURATION_MS = 3000;
+  const JOIN_MUSIC_MIN_VOLUME = 0.001;
+
+  function timeNow() {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return performance.now();
+    }
+    return Date.now();
+  }
+
+  function requestJoinMusicFrame(callback) {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      const id = window.requestAnimationFrame(callback);
+      return {
+        type: 'raf',
+        id,
+        cancel() {
+          if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+            window.cancelAnimationFrame(id);
+          }
+        },
+      };
+    }
+    const timeout = setTimeout(() => {
+      callback(timeNow());
+    }, 16);
+    return {
+      type: 'timeout',
+      id: timeout,
+      cancel() {
+        clearTimeout(timeout);
+      },
+    };
+  }
+
+  function cancelJoinMusicFrame(handle) {
+    if (!handle) return;
+    try {
+      if (typeof handle.cancel === 'function') {
+        handle.cancel();
+        return;
+      }
+      if (handle.type === 'raf' && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(handle.id);
+      } else if (handle.type === 'timeout') {
+        clearTimeout(handle.id);
+      }
+    } catch (err) {
+      /* ignore cancellation errors */
+    }
+  }
+
+  function clearJoinMusicFade(options = {}) {
+    if (joinMusicState.fadeHandle) {
+      cancelJoinMusicFrame(joinMusicState.fadeHandle);
+      joinMusicState.fadeHandle = null;
+    }
+    if (options.restoreVolume) {
+      const current = joinMusicState.audio;
+      if (current) {
+        try {
+          current.volume = JOIN_MUSIC_DEFAULT_VOLUME;
+        } catch (err) {
+          /* ignore audio volume errors */
+        }
+      }
+    }
+  }
+
+  function joinScreenIsActive() {
+    return Boolean(document && document.body && document.body.classList.contains('join-screen'));
+  }
+
+  function clearJoinMusicUnlock() {
+    if (!joinMusicState.unlockHandler) return;
+    window.removeEventListener('pointerdown', joinMusicState.unlockHandler);
+    window.removeEventListener('keydown', joinMusicState.unlockHandler);
+    joinMusicState.unlockHandler = null;
+  }
+
+  function stopJoinMusic(options = {}) {
+    const audio = joinMusicState.audio;
+    const resetPosition = options.resetPosition !== false;
+    if (options.resetQueue) {
+      joinMusicState.queue = [];
+    }
+    clearJoinMusicUnlock();
+    if (!audio) {
+      clearJoinMusicFade();
+      return;
+    }
+
+    const fadeDuration =
+      typeof options.fadeDurationMs === 'number' && options.fadeDurationMs > 0
+        ? options.fadeDurationMs
+        : 0;
+
+    if (fadeDuration > 0 && !audio.paused && audio.volume > JOIN_MUSIC_MIN_VOLUME) {
+      const startVolume = audio.volume;
+      const startTime = timeNow();
+      clearJoinMusicFade();
+
+      const finish = () => {
+        if (joinMusicState.audio === audio) {
+          joinMusicState.audio = null;
+        }
+        try {
+          audio.volume = 0;
+        } catch (err) {
+          /* ignore volume errors */
+        }
+        audio.pause();
+        if (resetPosition) {
+          try {
+            audio.currentTime = 0;
+          } catch (err) {
+            /* ignore currentTime errors */
+          }
+        }
+        try {
+          audio.volume = JOIN_MUSIC_DEFAULT_VOLUME;
+        } catch (err) {
+          /* ignore volume reset errors */
+        }
+      };
+
+      const step = (timestamp) => {
+        if (joinMusicState.audio !== audio) {
+          joinMusicState.fadeHandle = null;
+          return;
+        }
+        const now = typeof timestamp === 'number' ? timestamp : timeNow();
+        const elapsed = Math.max(0, now - startTime);
+        const progress = Math.min(1, fadeDuration > 0 ? elapsed / fadeDuration : 1);
+        const remaining = Math.max(0, 1 - progress);
+        const nextVolume = remaining <= 0 ? 0 : startVolume * remaining;
+        try {
+          audio.volume = nextVolume <= JOIN_MUSIC_MIN_VOLUME ? 0 : nextVolume;
+        } catch (err) {
+          /* ignore volume errors */
+        }
+        if (progress < 1 && !audio.paused && audio.volume > 0) {
+          joinMusicState.fadeHandle = requestJoinMusicFrame(step);
+          return;
+        }
+        joinMusicState.fadeHandle = null;
+        finish();
+      };
+
+      joinMusicState.fadeHandle = requestJoinMusicFrame(step);
+      return;
+    }
+
+    clearJoinMusicFade();
+    try {
+      audio.volume = 0;
+    } catch (err) {
+      /* ignore volume errors */
+    }
+    audio.pause();
+    if (resetPosition) {
+      try {
+        audio.currentTime = 0;
+      } catch (err) {
+        /* ignore currentTime errors */
+      }
+    }
+    try {
+      audio.volume = JOIN_MUSIC_DEFAULT_VOLUME;
+    } catch (err) {
+      /* ignore volume reset errors */
+    }
+    if (joinMusicState.audio === audio) {
+      joinMusicState.audio = null;
+    }
+  }
+
+  function joinMusicAvailable() {
+    return Array.isArray(joinMusicState.library) && joinMusicState.library.length > 0;
+  }
+
+  function resetJoinMusicQueue() {
+    if (!joinMusicAvailable()) {
+      joinMusicState.queue = [];
+      return;
+    }
+    joinMusicState.queue = shuffleList(joinMusicState.library);
+  }
+
+  function nextJoinTrack() {
+    if (!joinMusicAvailable()) return null;
+    if (!joinMusicState.queue.length) {
+      resetJoinMusicQueue();
+    }
+    return joinMusicState.queue.shift() || null;
+  }
+
+  function playNextJoinSong() {
+    if (!joinScreenIsActive()) return;
+    const track = nextJoinTrack();
+    if (!track) return;
+    clearJoinMusicFade();
+    const audio = new Audio(track.src);
+    audio.preload = 'auto';
+    audio.loop = false;
+    audio.volume = JOIN_MUSIC_DEFAULT_VOLUME;
+    joinMusicState.audio = audio;
+    const handleNext = () => {
+      if (joinMusicState.audio === audio) {
+        joinMusicState.audio = null;
+        playNextJoinSong();
+      }
+    };
+    audio.addEventListener('ended', handleNext);
+    audio.addEventListener('error', handleNext);
+    const attempt = audio.play();
+    if (attempt && typeof attempt.then === 'function') {
+      attempt.then(() => {
+        clearJoinMusicUnlock();
+      }).catch(() => {
+        // Autoplay likely blocked; wait for user interaction.
+      });
+    } else {
+      clearJoinMusicUnlock();
+    }
+  }
+
+  function attemptJoinMusicPlayback() {
+    if (!joinScreenIsActive() || !joinMusicAvailable()) return;
+    const current = joinMusicState.audio;
+    if (current) {
+      if (!current.paused) return;
+      const attempt = current.play();
+      if (attempt && typeof attempt.then === 'function') {
+        attempt.then(() => {
+          clearJoinMusicUnlock();
+        }).catch(() => {
+          // Autoplay still blocked; keep unlock handler.
+        });
+      }
+      return;
+    }
+    playNextJoinSong();
+  }
+
+  function setJoinMusicLibrary(rawSongs) {
+    const normalized = [];
+    if (Array.isArray(rawSongs)) {
+      rawSongs.forEach((song, index) => {
+        if (!song || typeof song !== 'object') return;
+        const src = typeof song.src === 'string' ? song.src.trim() : '';
+        if (!src) return;
+        const id = typeof song.id === 'string' && song.id.trim() ? song.id.trim() : `song_${index}`;
+        const title = typeof song.title === 'string' && song.title.trim() ? song.title.trim() : id;
+        normalized.push({ id, src, title });
+      });
+    }
+    joinMusicState.library = normalized;
+    joinMusicState.queue = [];
+    if (!normalized.length) {
+      stopJoinMusic({ resetQueue: true });
+    }
+  }
+
+  function loadJoinMusicLibrary() {
+    if (joinMusicState.fetchPromise) return joinMusicState.fetchPromise;
+    const request = fetch('/api/join_songs', { cache: 'no-store' })
+      .then((resp) => (resp && resp.ok ? resp.json() : { songs: [] }))
+      .then((payload) => {
+        const songs = payload && Array.isArray(payload.songs) ? payload.songs : [];
+        setJoinMusicLibrary(songs);
+        if (joinScreenIsActive()) {
+          attemptJoinMusicPlayback();
+        }
+        return joinMusicState.library;
+      })
+      .catch(() => {
+        setJoinMusicLibrary([]);
+        return joinMusicState.library;
+      })
+      .finally(() => {
+        joinMusicState.fetchPromise = null;
+      });
+    joinMusicState.fetchPromise = request;
+    return request;
+  }
+
+  function armJoinMusicUnlock() {
+    if (joinMusicState.unlockHandler) return;
+    loadJoinMusicLibrary();
+    const handler = () => {
+      ensureJoinMusic();
+      const current = joinMusicState.audio;
+      if (current && !current.paused) {
+        clearJoinMusicUnlock();
+      }
+    };
+    joinMusicState.unlockHandler = handler;
+    window.addEventListener('pointerdown', handler, { passive: true });
+    window.addEventListener('keydown', handler, { passive: true });
+  }
+
+  function ensureJoinMusic() {
+    if (joinMusicAvailable()) {
+      clearJoinMusicFade({ restoreVolume: true });
+      attemptJoinMusicPlayback();
+      return;
+    }
+    loadJoinMusicLibrary().then(() => {
+      clearJoinMusicFade({ restoreVolume: true });
+      attemptJoinMusicPlayback();
+    }).catch(() => {
+      /* ignore fetch errors */
+    });
   }
 
   function applyJoinBackground(url) {
@@ -663,12 +1122,16 @@ F11</span>
     lastPublic: null,
     autoTtsEnabled: false,
     autoImageEnabled: false,
+    autoVideoEnabled: false,
     language: 'en',
     joinBackgroundUrl: null,
     currentTurn: 0,
     joinStatusKey: null,
     joinStatusArgs: null,
     lastPrivate: null,
+    sceneVideoUrl: null,
+    sceneVideoToken: null,
+    sceneVideoUserPaused: false,
     fxSaverEnabled: initialFxSaver,
     youHighlights: {
       turn: 0,
@@ -683,6 +1146,18 @@ F11</span>
       conditions: new Map(),
     },
   };
+
+  let ignoreSceneVideoPause = false;
+
+  function ensureJoinBackgroundFromPool(options = {}) {
+    const pool = getJoinBackgroundPool();
+    if (!pool.length) return;
+    const force = options && options.force === true;
+    if (force || !state.joinBackgroundUrl || !pool.includes(state.joinBackgroundUrl)) {
+      state.joinBackgroundUrl = pickJoinBackground();
+      applyJoinBackground(state.joinBackgroundUrl);
+    }
+  }
 
   function applyFxSaver(enabled, options = {}) {
     if (enabled) {
@@ -702,9 +1177,100 @@ F11</span>
     current: null,
   };
 
-  const scenarioScrollState = {
+  const narrativeScrollState = {
     lastTurnScrolled: null,
   };
+
+  let narrativeSizer;
+
+  const LEAVE_NOTICE_GRACE_MS = 5000;
+  const leaveNoticeState = new Map();
+
+  function normalizeId(value) {
+    if (value == null) return null;
+    if (typeof value === 'string') return value;
+    try {
+      const text = String(value);
+      return text || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearLeaveNotice(pid) {
+    if (!pid) return;
+    const entry = leaveNoticeState.get(pid);
+    if (entry && entry.timer) {
+      clearTimeout(entry.timer);
+    }
+    leaveNoticeState.delete(pid);
+  }
+
+  function triggerLeaveNoticeUpdate(pid) {
+    if (state.lastPublic) {
+      renderPublic(state.lastPublic);
+    }
+    const you = state.lastPrivate && state.lastPrivate.you ? state.lastPrivate.you : null;
+    const youId = you ? normalizeId(you.id) : null;
+    if (youId && youId === pid) {
+      renderPrivate(state.lastPrivate);
+    }
+  }
+
+  function shouldShowLeaveNotice(pid, pendingLeave) {
+    if (!pendingLeave) {
+      if (pid) {
+        clearLeaveNotice(pid);
+      }
+      return false;
+    }
+    if (!pid) {
+      return true;
+    }
+    const now = Date.now();
+    let entry = leaveNoticeState.get(pid);
+    if (!entry) {
+      entry = { started: now, ready: false, timer: null };
+      leaveNoticeState.set(pid, entry);
+    }
+    if (entry.ready) {
+      return true;
+    }
+    const elapsed = now - entry.started;
+    if (elapsed >= LEAVE_NOTICE_GRACE_MS) {
+      entry.ready = true;
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+        entry.timer = null;
+      }
+      leaveNoticeState.set(pid, entry);
+      return true;
+    }
+    if (!entry.timer) {
+      const delay = Math.max(LEAVE_NOTICE_GRACE_MS - elapsed, 0);
+      entry.timer = setTimeout(() => {
+        const stored = leaveNoticeState.get(pid);
+        if (!stored) return;
+        stored.ready = true;
+        stored.timer = null;
+        leaveNoticeState.set(pid, stored);
+        triggerLeaveNoticeUpdate(pid);
+      }, delay);
+      leaveNoticeState.set(pid, entry);
+    }
+    return false;
+  }
+
+  function pruneLeaveNoticeState(activeIds) {
+    leaveNoticeState.forEach((entry, pid) => {
+      if (!activeIds.has(pid)) {
+        if (entry && entry.timer) {
+          clearTimeout(entry.timer);
+        }
+        leaveNoticeState.delete(pid);
+      }
+    });
+  }
 
   const joinDragState = {
     initialized: false,
@@ -799,7 +1365,8 @@ F11</span>
   const SUPPORTED_LANGUAGES = ['en', 'de'];
   const LANGUAGE_STORAGE_KEY = 'orpg-language';
   let DEFAULT_WORLD_STYLE = 'High Fantasy';
-  const DEFAULT_TEXT_MODEL = 'gemini-2.5-flash';
+  const DEFAULT_TEXT_MODEL = 'grok-4-fast-non-reasoning';
+  const DEFAULT_VIDEO_MODEL = 'veo-3.0-generate-001';
   const CUSTOM_WORLD_VALUE = '__custom__';
   const WORLD_STYLE_SOURCE_PATH = '/static/world-styles.json';
   const WORLD_STYLE_APPLIES_HINTS = {
@@ -1015,11 +1582,16 @@ F11</span>
     "alerts.toggleNarrationFailedDetail": { en: "Toggle narration failed: {{message}}", de: "Erzählung umschalten fehlgeschlagen: {{message}}" },
     "alerts.toggleImageFailed": { en: "Toggle scene images failed", de: "Automatisches Szenenbild umschalten fehlgeschlagen" },
     "alerts.toggleImageFailedDetail": { en: "Toggle scene images failed: {{message}}", de: "Automatisches Szenenbild umschalten fehlgeschlagen: {{message}}" },
+    "alerts.toggleVideoFailed": { en: "Toggle scene animation failed", de: "Automatische Szenenanimation umschalten fehlgeschlagen" },
+    "alerts.toggleVideoFailedDetail": { en: "Toggle scene animation failed: {{message}}", de: "Automatische Szenenanimation umschalten fehlgeschlagen: {{message}}" },
+    "alerts.animateFailed": { en: "Animate scene failed", de: "Videoanimation fehlgeschlagen" },
+    "alerts.animateFailedDetail": { en: "Animate scene failed: {{message}}", de: "Videoanimation fehlgeschlagen: {{message}}" },
     "common.working": { en: "Working…", de: "Verarbeite …" },
     "common.workingCountdown": { en: "Working… {{seconds}}s", de: "Verarbeite … {{seconds}}s" },
     "game.ability.unnamed": { en: "Unnamed ability", de: "Unbenannte Fähigkeit" },
     "game.actionPlaceholder": { en: "What do you attempt to do?", de: "Was versuchst du zu tun?" },
     "game.actions": { en: "Actions", de: "Aktionen" },
+    "game.autoSubmitHint": { en: "Actions submit automatically after a brief pause.", de: "Aktionen werden nach einer kurzen Pause automatisch übermittelt." },
     "game.advanceCountdown": { en: "Advancing… {{seconds}}s", de: "Weiter … {{seconds}}s" },
     "game.condition.unnamed": { en: "Unnamed condition", de: "Unbenannter Zustand" },
     "game.dropZone": { en: "Drop here to create a new lane", de: "Hier ablegen, um eine neue Spalte zu erstellen" },
@@ -1027,11 +1599,17 @@ F11</span>
     "game.inventory.unnamed": { en: "Unnamed item", de: "Unbenannter Gegenstand" },
     "game.lock.banner.busy": { en: "Busy…", de: "Beschäftigt …" },
     "game.lock.banner.generatingImage": { en: "Generating image…", de: "Bild wird erzeugt …" },
+    "game.lock.banner.generatingImageCountdown": { en: "Generating image… {{seconds}}s", de: "Bild wird erzeugt … {{seconds}}s" },
     "game.lock.banner.generatingPortrait": { en: "Rendering portrait…", de: "Porträt wird gerendert …" },
+    "game.lock.banner.generatingPortraitCountdown": { en: "Rendering portrait… {{seconds}}s", de: "Porträt wird gerendert … {{seconds}}s" },
+    "game.lock.banner.generatingVideo": { en: "Rendering video…", de: "Video wird gerendert …" },
+    "game.lock.banner.generatingVideoCountdown": { en: "Rendering video… {{seconds}}s", de: "Video wird gerendert … {{seconds}}s" },
     "game.lock.banner.resolving": { en: "Resolving turn…", de: "Runde wird ausgewertet …" },
+    "game.lock.banner.resolvingCountdown": { en: "Resolving turn… {{seconds}}s", de: "Runde wird ausgewertet … {{seconds}}s" },
     "game.lock.reason.busy": { en: "Disabled while the GM is busy.", de: "Deaktiviert, während der SL beschäftigt ist." },
     "game.lock.reason.generatingImage": { en: "Disabled while image generation is in progress.", de: "Deaktiviert, während ein Bild erzeugt wird." },
     "game.lock.reason.generatingPortrait": { en: "Disabled while a portrait is rendering.", de: "Deaktiviert, während ein Porträt gerendert wird." },
+    "game.lock.reason.generatingVideo": { en: "Disabled while a video is rendering.", de: "Deaktiviert, während ein Video gerendert wird." },
     "game.lock.reason.resolving": { en: "Disabled while the turn is being resolved.", de: "Deaktiviert, während die Runde ausgewertet wird." },
     "game.narrateOff": { en: "Narrate Off", de: "Erzählung aus" },
     "game.narrateOn": { en: "Narrate On", de: "Erzählung an" },
@@ -1043,6 +1621,8 @@ F11</span>
     "game.noAbility": { en: "no notable abilities", de: "keine besonderen Fähigkeiten" },
     "game.noCondition": { en: "no special conditions", de: "keine besonderen Zustände" },
     "game.noInventory": { en: "no carried gear", de: "keine getragene Ausrüstung" },
+    "game.playerAction.none": { en: "No action submitted", de: "Noch keine Aktion übermittelt" },
+    "game.playerAction.prefix": { en: "Submitted action: ", de: "Übermittelte Aktion: " },
     "game.playerFallback": { en: "Player", de: "Spieler" },
     "game.playerFlag.departing": { en: "departing after next turn", de: "verlässt nach der nächsten Runde" },
     "game.playerFlag.queued": { en: "queued to enter", de: "zum Beitritt vorgemerkt" },
@@ -1057,8 +1637,7 @@ F11</span>
     "game.portrait.tooltip.onlyOwner": { en: "Only this player can update their portrait.", de: "Nur dieser Spieler kann sein Porträt aktualisieren." },
     "game.portrait.ariaLabel": { en: "{{name}} portrait", de: "Porträt von {{name}}" },
     "game.portrait.tooltip.refresh": { en: "Click to refresh your portrait.", de: "Klicke, um dein Porträt zu aktualisieren." },
-    "game.scenario": { en: "Scenario", de: "Szenario" },
-    "game.submissionsHeading": { en: "This turn's submissions", de: "Beiträge dieser Runde" },
+    "game.narrative": { en: "Narrative", de: "Erzählung" },
     "game.submit": { en: "Submit", de: "Absenden" },
     "game.turn": { en: "Turn {{count}}", de: "Runde {{count}}" },
     "game.waiting": { en: "Waiting…", de: "Warten …" },
@@ -1068,8 +1647,8 @@ F11</span>
     "devInfo.response": { en: "Last response", de: "Letzte Antwort" },
     "devInfo.summaryRequestHeading": { en: "Summary request", de: "Zusammenfassungs-Anfrage" },
     "devInfo.summaryResponseHeading": { en: "Summary response", de: "Zusammenfassungs-Antwort" },
-    "devInfo.scenarioRequestHeading": { en: "Scenario request", de: "Szenario-Anfrage" },
-    "devInfo.scenarioResponseHeading": { en: "Scenario response", de: "Szenario-Antwort" },
+    "devInfo.turnRequestHeading": { en: "Turn request", de: "Rundenanfrage" },
+    "devInfo.turnResponseHeading": { en: "Turn response", de: "Rundenantwort" },
     "devInfo.tip": { en: "Shows the most recent payload sent to the text model and everything it returned.", de: "Zeigt die zuletzt an das Textmodell gesendeten Daten sowie die komplette Antwort." },
     "devInfo.title": { en: "Text API exchange", de: "Text-API-Austausch" },
     "header.devInfo": { en: "Developer info", de: "Entwicklerinfo" },
@@ -1112,6 +1691,12 @@ F11</span>
     "sidebar.autoImageOn": { en: "Auto Image On", de: "Auto-Bild an" },
     "sidebar.autoImage.enableTitle": { en: "Enable automatic scene images", de: "Automatische Szenenbilder aktivieren" },
     "sidebar.autoImage.disableTitle": { en: "Disable automatic scene images", de: "Automatische Szenenbilder deaktivieren" },
+    "sidebar.animateImage": { en: "Animate Image", de: "Bild animieren" },
+    "sidebar.animateImageTitle": { en: "Animate the current scene image", de: "Aktuelles Szenenbild animieren" },
+    "sidebar.autoVideoOff": { en: "Auto Animation Off", de: "Auto-Animation aus" },
+    "sidebar.autoVideoOn": { en: "Auto Animation On", de: "Auto-Animation an" },
+    "sidebar.autoVideo.enableTitle": { en: "Enable automatic scene animations", de: "Automatische Szenenanimationen aktivieren" },
+    "sidebar.autoVideo.disableTitle": { en: "Disable automatic scene animations", de: "Automatische Szenenanimationen deaktivieren" },
     "settings.apiKeyPlaceholder": { en: "Paste your key…", de: "Schlüssel einfügen …" },
     "settings.close": { en: "Close settings", de: "Einstellungen schließen" },
     "settings.difficulty.label": { en: "Difficulty", de: "Schwierigkeit" },
@@ -1125,6 +1710,8 @@ F11</span>
     "settings.grokKey.label": { en: "Grok API key", de: "Grok-API-Schlüssel" },
     "settings.openaiKey.label": { en: "OpenAI API key", de: "OpenAI-API-Schlüssel" },
     "settings.imageModel.label": { en: "Image model", de: "Bildmodell" },
+    "settings.videoModel.label": { en: "Video model", de: "Videomodell" },
+    "settings.videoModel.savedSuffix": { en: "(saved)", de: "(gespeichert)" },
     "settings.narrationModel.disabledTitle": { en: "Save a valid ElevenLabs API key to load narration models.", de: "Speichere einen gültigen ElevenLabs-API-Schlüssel, um Erzählmodelle zu laden." },
     "settings.narrationModel.enterKey": { en: "Enter ElevenLabs API key to load models", de: "Gib einen ElevenLabs-API-Schlüssel ein, um Modelle zu laden" },
     "settings.narrationModel.label": { en: "Narration model", de: "Erzählmodell" },
@@ -1177,7 +1764,19 @@ F11</span>
     "stats.image.title": { en: "Image usage details", de: "Bildnutzung im Detail" },
     "stats.image.turnByType": { en: "This Turn Images by Type", de: "Bilder dieser Runde nach Typ" },
     "stats.image.turnCost": { en: "This Turn Image Cost", de: "Bildkosten dieser Runde" },
+    "stats.video.title": { en: "Video usage details", de: "Videonutzung im Detail" },
+    "stats.video.turnCost": { en: "This Turn Video Cost", de: "Videokosten dieser Runde" },
+    "stats.video.sessionCost": { en: "Session Video Cost", de: "Videokosten der Sitzung" },
+    "stats.video.lastModel": { en: "Last Video Model", de: "Letztes Videomodell" },
+    "stats.video.lastSeconds": { en: "Last Video Duration (seconds)", de: "Letzte Videodauer (Sekunden)" },
+    "stats.video.sessionSeconds": { en: "Session Video Duration", de: "Videodauer in der Sitzung" },
+    "stats.video.usdPerSecond": { en: "USD per second", de: "USD pro Sekunde" },
+    "stats.video.avgUsdPerSecond": { en: "Average USD per second", de: "Durchschn. USD pro Sekunde" },
+    "stats.video.requests": { en: "Session Requests", de: "Anfragen in der Sitzung" },
+    "stats.video.avgSecondsPerRequest": { en: "Average seconds per request", de: "Durchschn. Sekunden pro Anfrage" },
+    "stats.video.tip": { en: "Video pricing uses Veo per-second rates for generated clips.", de: "Die Videokosten basieren auf den Veo-Preisen pro Sekunde für generierte Clips." },
     "stats.main.imageDetails": { en: "Image details", de: "Bilddetails" },
+    "stats.main.videoDetails": { en: "Video details", de: "Videodetails" },
     "stats.main.narrationDetails": { en: "Narration details", de: "Erzähldetails" },
     "stats.main.textDetails": { en: "Text details", de: "Textdetails" },
     "stats.main.tip": { en: "Open a category to see token and cost breakdowns.", de: "Öffne eine Kategorie, um Token- und Kostenaufteilungen zu sehen." },
@@ -1399,13 +1998,13 @@ F11</span>
     if (state.joinStatusKey) {
       updateJoinStatus('', { key: state.joinStatusKey, args: state.joinStatusArgs || {} });
     }
-    const scenarioEl = $('scenario');
-    if (scenarioEl && !scenarioEl.dataset.historyReady) {
-      const trimmed = (scenarioEl.textContent || '').trim();
+    const narrativeEl = $('narrative');
+    if (narrativeEl && !narrativeEl.dataset.historyReady) {
+      const trimmed = (narrativeEl.textContent || '').trim();
       const waitingEn = TRANSLATIONS['game.waiting'] ? TRANSLATIONS['game.waiting'].en : 'Waiting…';
       const waitingDe = TRANSLATIONS['game.waiting'] ? TRANSLATIONS['game.waiting'].de : 'Warten …';
       if (!trimmed || trimmed === waitingEn || trimmed === waitingDe) {
-        scenarioEl.textContent = t('game.waiting');
+        narrativeEl.textContent = t('game.waiting');
       }
     }
     if (state.lastPublic) {
@@ -1431,6 +2030,62 @@ F11</span>
 
   let systemNoticeTimer = null;
   const buttonCountdowns = new Map();
+
+  const lockBannerCountdownKeys = {
+    resolving_turn: 'game.lock.banner.resolvingCountdown',
+    generating_image: 'game.lock.banner.generatingImageCountdown',
+    generating_portrait: 'game.lock.banner.generatingPortraitCountdown',
+    generating_video: 'game.lock.banner.generatingVideoCountdown',
+  };
+
+  const lockBannerCountdownState = {
+    timer: null,
+    reason: '',
+    start: 0,
+    banner: null,
+    translationKey: '',
+  };
+
+  function stopLockBannerCountdown() {
+    if (lockBannerCountdownState.timer) {
+      clearInterval(lockBannerCountdownState.timer);
+      lockBannerCountdownState.timer = null;
+    }
+    lockBannerCountdownState.reason = '';
+    lockBannerCountdownState.start = 0;
+    lockBannerCountdownState.banner = null;
+    lockBannerCountdownState.translationKey = '';
+  }
+
+  function updateLockBannerCountdown() {
+    const { banner, translationKey, start } = lockBannerCountdownState;
+    if (!banner || !translationKey || !start) return;
+    const elapsed = Date.now() - start;
+    const seconds = Math.max(1, Math.floor(elapsed / 1000) + 1);
+    banner.textContent = t(translationKey, { seconds });
+  }
+
+  function ensureLockBannerCountdown(banner, reason) {
+    const translationKey = lockBannerCountdownKeys[reason];
+    if (!translationKey) {
+      stopLockBannerCountdown();
+      return false;
+    }
+    if (lockBannerCountdownState.timer && lockBannerCountdownState.reason === reason) {
+      lockBannerCountdownState.banner = banner;
+      lockBannerCountdownState.translationKey = translationKey;
+      updateLockBannerCountdown();
+      return true;
+    }
+    stopLockBannerCountdown();
+    lockBannerCountdownState.reason = reason || '';
+    lockBannerCountdownState.banner = banner || null;
+    lockBannerCountdownState.translationKey = translationKey;
+    lockBannerCountdownState.start = Date.now();
+    updateLockBannerCountdown();
+    lockBannerCountdownState.timer = setInterval(updateLockBannerCountdown, 1000);
+    return true;
+  }
 
   function syncFullscreenHint() {
     const hint = $('fullscreenHint');
@@ -1542,37 +2197,80 @@ F11</span>
     }
   }
 
-  function getScenarioBlock(turnNumber, createIfMissing = false) {
-    const scenarioEl = $("scenario");
-    if (!scenarioEl) return null;
+  function getNarrativeBlock(turnNumber, createIfMissing = false) {
+    const narrativeEl = $("narrative");
+    if (!narrativeEl) return null;
     const key = typeof turnNumber === 'number' && Number.isFinite(turnNumber) ? turnNumber : 0;
-    let block = scenarioEl.querySelector(`[data-turn="${key}"]`);
+    let block = narrativeEl.querySelector(`[data-turn="${key}"]`);
     if (!block && createIfMissing) {
-      if (!scenarioEl.dataset.historyReady) {
-        scenarioEl.textContent = '';
-        scenarioEl.classList.remove('muted');
-        scenarioEl.dataset.historyReady = '1';
+      if (!narrativeEl.dataset.historyReady) {
+        narrativeEl.textContent = '';
+        narrativeEl.classList.remove('muted');
+        narrativeEl.dataset.historyReady = '1';
       }
       block = document.createElement('div');
-      block.className = 'scenario-block';
+      block.className = 'narrative-block';
       block.dataset.turn = String(key);
-      scenarioEl.appendChild(block);
+      narrativeEl.insertBefore(block, narrativeEl.firstChild);
     }
     return block;
   }
 
-  function scenarioIsPinnedToBottom(el, threshold = 24) {
-    if (!el) return false;
-    if (el.scrollHeight <= el.clientHeight) return true;
-    const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-    return distance <= threshold;
+  function renderNarrativeHistory(history) {
+    const narrativeEl = $("narrative");
+    if (!narrativeEl) return;
+    const entries = Array.isArray(history) ? history : [];
+    if (!entries.length) {
+      if (narrativeEl.dataset.historyHydrated) {
+        narrativeEl.textContent = t('game.waiting');
+        narrativeEl.classList.add('muted');
+        delete narrativeEl.dataset.historyReady;
+        delete narrativeEl.dataset.historyHydrated;
+      }
+      return;
+    }
+
+    const seenTurns = new Set();
+    entries.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const rawTurn = entry.turn ?? entry.index ?? entry.turn_index;
+      const turnNumber = Number(rawTurn);
+      if (!Number.isFinite(turnNumber)) return;
+      const narrativeText = typeof entry.narrative === 'string' ? entry.narrative : '';
+      const hasText = narrativeText.trim().length > 0;
+      const block = getNarrativeBlock(turnNumber, true);
+      if (!block) return;
+      block.textContent = hasText ? narrativeText : '—';
+      if (entry.timestamp != null) {
+        block.dataset.timestamp = String(entry.timestamp);
+      } else if (block.dataset.timestamp) {
+        delete block.dataset.timestamp;
+      }
+      seenTurns.add(String(turnNumber));
+    });
+
+    const blocks = Array.from(narrativeEl.querySelectorAll('.narrative-block'));
+    blocks.forEach((block) => {
+      const key = block.dataset.turn || '';
+      if (!seenTurns.has(key)) {
+        block.remove();
+      }
+    });
+
+    narrativeEl.dataset.historyHydrated = '1';
   }
 
-  function scrollScenarioToBottom() {
-    const scenarioEl = $("scenario");
-    if (!scenarioEl) return;
+  function narrativeIsPinnedToTop(el, threshold = 24) {
+    if (!el) return false;
+    if (el.scrollHeight <= el.clientHeight) return true;
+    return el.scrollTop <= threshold;
+  }
+
+  function scrollNarrativeToTop() {
+    const narrativeEl = $("narrative");
+    if (!narrativeEl) return;
     requestAnimationFrame(() => {
-      scenarioEl.scrollTop = scenarioEl.scrollHeight;
+      narrativeEl.scrollTop = 0;
     });
   }
 
@@ -1609,18 +2307,93 @@ F11</span>
     btn.disabled = !state.playerId || busy;
   }
 
-  function scenarioIsActive() {
+  function syncSceneVideoToggle(enabled) {
+    state.autoVideoEnabled = Boolean(enabled);
+    const btn = $("btnAnimateScene");
+    if (!btn) return;
+    const active = Boolean(enabled);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.classList.toggle("active", active);
+    btn.textContent = active ? t('sidebar.autoVideoOn') : t('sidebar.autoVideoOff');
+    btn.title = active ? t('sidebar.autoVideo.disableTitle') : t('sidebar.autoVideo.enableTitle');
+    const busy = Boolean(state.lock && state.lock.active);
+    btn.disabled = !state.playerId || busy;
+  }
+
+  function setupSceneVideoPersistence() {
+    const videoEl = $("sceneVideo");
+    if (!videoEl || videoEl.dataset.sceneVideoHandlers === 'true') return;
+
+    videoEl.dataset.sceneVideoHandlers = 'true';
+
+    videoEl.addEventListener('play', () => {
+      state.sceneVideoUserPaused = false;
+      delete videoEl.dataset.userPaused;
+    });
+
+    videoEl.addEventListener('pause', () => {
+      if (ignoreSceneVideoPause) return;
+      if (!videoEl.dataset.baseUrl) return;
+      if (videoEl.ended) return;
+      state.sceneVideoUserPaused = true;
+      videoEl.dataset.userPaused = 'true';
+    });
+
+    videoEl.addEventListener('ended', () => {
+      state.sceneVideoUserPaused = false;
+      delete videoEl.dataset.userPaused;
+    });
+  }
+
+  function ensureSceneVideoAutoplays(videoEl) {
+    if (!videoEl) return;
+    if (state.sceneVideoUserPaused) return;
+    videoEl.autoplay = true;
+    if (!videoEl.hasAttribute('autoplay')) {
+      videoEl.setAttribute('autoplay', '');
+    }
+    if (typeof videoEl.play !== 'function') return;
+    const handleAutoplayFailure = (err) => {
+      console.warn('Scene video autoplay blocked, retrying muted.', err);
+      videoEl.dataset.autoplayMuted = 'true';
+      videoEl.defaultMuted = true;
+      videoEl.muted = true;
+      if (!videoEl.hasAttribute('muted')) {
+        videoEl.setAttribute('muted', '');
+      }
+      const mutedPlay = videoEl.play();
+      if (mutedPlay && typeof mutedPlay.catch === 'function') {
+        mutedPlay.catch((innerErr) => {
+          console.warn('Scene video muted autoplay failed.', innerErr);
+        });
+      }
+    };
+    const playAttempt = videoEl.play();
+    if (playAttempt && typeof playAttempt.then === 'function') {
+      playAttempt
+        .then(() => {
+          if (videoEl.dataset.autoplayMuted === 'true') {
+            delete videoEl.dataset.autoplayMuted;
+          }
+        })
+        .catch(handleAutoplayFailure);
+    } else if (playAttempt && typeof playAttempt.catch === 'function') {
+      playAttempt.catch(handleAutoplayFailure);
+    }
+  }
+
+  function narrativeIsActive() {
     const pub = state.lastPublic;
     if (!pub) return false;
-    const scenarioText = typeof pub.current_scenario === 'string' ? pub.current_scenario.trim() : '';
-    if (scenarioText) return true;
+    const narrativeText = typeof pub.current_narrative === 'string' ? pub.current_narrative.trim() : '';
+    if (narrativeText) return true;
     return typeof pub.turn_index === 'number' && pub.turn_index > 0;
   }
 
   function refreshJoinGuidance() {
     const hint = $("joinHint");
     if (!hint) return;
-    if (scenarioIsActive()) {
+    if (narrativeIsActive()) {
       hint.textContent = t('join.status.waitingActive');
     } else {
       hint.textContent = t('join.status.waitingIdle');
@@ -1668,11 +2441,13 @@ F11</span>
   }
 
   function persistPlayerSession(details) {
-    if (!details || !details.id || !details.token) return;
+    if (!details || !details.token) return;
+    const normalizedId = normalizeId(details.id);
+    if (!normalizedId) return;
     const existing = getStoredPlayer() || {};
     const next = {
       ...existing,
-      id: details.id,
+      id: normalizedId,
       token: details.token,
       name: details.name || existing.name || '',
       background: details.background || existing.background || '',
@@ -1734,7 +2509,7 @@ F11</span>
     if (!state.playerId || !state.playerToken) return;
     state.pendingJoin = pending;
     if (pending) {
-      if (scenarioIsActive()) {
+      if (narrativeIsActive()) {
         updateJoinStatus('', { key: 'join.status.queueActive' });
       } else {
         updateJoinStatus('', { key: 'join.status.preparing' });
@@ -1757,6 +2532,7 @@ F11</span>
   }
 
   function showGameView() {
+    stopJoinMusic({ resetQueue: true, fadeDurationMs: JOIN_MUSIC_FADE_DURATION_MS });
     if (document && document.body) document.body.classList.remove('join-screen');
     cancelJoinDrag();
     const joinView = $("joinView");
@@ -1770,6 +2546,7 @@ F11</span>
   }
 
   function showJoinView() {
+    loadJoinBackgrounds();
     if (!state.joinBackgroundUrl) {
       state.joinBackgroundUrl = pickJoinBackground();
     }
@@ -1795,6 +2572,8 @@ F11</span>
     if (devBtn) devBtn.style.display = "none";
     initJoinDrag();
     syncJoinViewModalVisibility();
+    ensureJoinMusic();
+    armJoinMusicUnlock();
   }
 
   function cancelJoinDrag() {
@@ -2464,7 +3243,7 @@ F11</span>
   // UI helpers
   function setLockBanner(lock) {
     const banner = $("lockBanner");
-    const buttons = [$("btnSubmit"), $("btnNextTurn"), $("btnCreateImage"), $("btnEnter")].filter(Boolean);
+    const buttons = [$("btnSubmit"), $("btnNextTurn"), $("btnCreateImage"), $("btnAnimateImage"), $("btnAnimateScene"), $("btnEnter")].filter(Boolean);
     const portraitButtons = Array.from(document.querySelectorAll(".player-portrait"));
     state.lock = lock || {active:false, reason:""};
     const active = Boolean(state.lock.active);
@@ -2474,15 +3253,23 @@ F11</span>
         if (state.lock.reason === "resolving_turn") why = t('game.lock.banner.resolving');
         else if (state.lock.reason === "generating_image") why = t('game.lock.banner.generatingImage');
         else if (state.lock.reason === "generating_portrait") why = t('game.lock.banner.generatingPortrait');
-        banner.textContent = why;
+        else if (state.lock.reason === "generating_video") why = t('game.lock.banner.generatingVideo');
+        const hasCountdown = ensureLockBannerCountdown(banner, state.lock.reason);
+        if (!hasCountdown) {
+          banner.textContent = why;
+        }
       } else {
+        stopLockBannerCountdown();
         banner.textContent = "";
       }
+    } else {
+      stopLockBannerCountdown();
     }
     const titleMap = {
       resolving_turn: t('game.lock.reason.resolving'),
       generating_image: t('game.lock.reason.generatingImage'),
       generating_portrait: t('game.lock.reason.generatingPortrait'),
+      generating_video: t('game.lock.reason.generatingVideo'),
     };
     const disableTitle = titleMap[state.lock.reason] || t('game.lock.reason.busy');
     buttons.forEach((b) => {
@@ -3005,6 +3792,7 @@ F11</span>
       // Fetch models first, then set selection
       const textSel = $("setTextModel");
       const imgSel = $("setImageModel");
+      const videoSel = $("setVideoModel");
       const narrationSel = $("setNarrationModel");
       try {
         const resp = await fetch("/api/models");
@@ -3097,6 +3885,65 @@ F11</span>
           if (exists) imgSel.value = s.image_model;
         }
 
+        if (videoSel) {
+          videoSel.innerHTML = "";
+          const seenVideoModels = new Set();
+          const videoOptions = [];
+          availableModels.forEach(m => {
+            const provider = String(m.provider || 'gemini').toLowerCase();
+            if (provider !== 'gemini') return;
+            const category = typeof m.category === 'string' ? m.category.toLowerCase() : '';
+            const supportedRaw = Array.isArray(m.supported) ? m.supported : [];
+            const supported = supportedRaw.map((value) => String(value).toLowerCase());
+
+            let rawName = '';
+            if (typeof m.modelId === 'string' && m.modelId.trim()) {
+              rawName = m.modelId.trim();
+            } else if (typeof m.name === 'string' && m.name.trim()) {
+              rawName = m.name.trim().replace(/^models\//, '');
+            }
+            if (!rawName) return;
+
+            const isVeoName = rawName.toLowerCase().startsWith('veo');
+            const isVideo = category === 'video' || isVeoName || supported.includes('predictlongrunning');
+            if (!isVideo) return;
+            if (seenVideoModels.has(rawName)) return;
+
+            seenVideoModels.add(rawName);
+            const baseLabel = typeof m.displayName === 'string' && m.displayName.trim()
+              ? m.displayName.trim()
+              : rawName;
+            videoOptions.push({ value: rawName, label: rawName, helper: baseLabel });
+          });
+
+          videoOptions.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+          videoOptions.forEach(entry => {
+            const opt = document.createElement('option');
+            opt.value = entry.value;
+            opt.textContent = entry.label;
+            if (entry.helper && entry.helper !== entry.label) {
+              opt.title = entry.helper;
+            }
+            videoSel.appendChild(opt);
+          });
+
+          const desiredVideoModel = (s.video_model || DEFAULT_VIDEO_MODEL || '').trim();
+          if (desiredVideoModel) {
+            const hasVideoModel = [...videoSel.options].some((opt) => opt.value === desiredVideoModel);
+            if (hasVideoModel) {
+              videoSel.value = desiredVideoModel;
+            } else {
+              const opt = document.createElement('option');
+              opt.value = desiredVideoModel;
+              opt.textContent = `${desiredVideoModel} ${t('settings.videoModel.savedSuffix')}`;
+              videoSel.appendChild(opt);
+              videoSel.value = desiredVideoModel;
+            }
+          } else if (videoSel.options.length) {
+            videoSel.value = DEFAULT_VIDEO_MODEL;
+          }
+        }
+
         if (narrationSel) {
           narrationSel.innerHTML = "";
           narrationSel.removeAttribute("disabled");
@@ -3158,7 +4005,7 @@ F11</span>
       }
 
       const keyInput = $("setKey");
-      if (keyInput) keyInput.value = typeof s.api_key === 'string' ? s.api_key : '';
+      if (keyInput) keyInput.value = typeof s.gemini_api_key === 'string' ? s.gemini_api_key : '';
       const grokKeyInput = $("setGrokKey");
       if (grokKeyInput) grokKeyInput.value = typeof s.grok_api_key === 'string' ? s.grok_api_key : '';
       const openaiKeyInput = $("setOpenAIKey");
@@ -3227,6 +4074,7 @@ F11</span>
       thinking_mode: $("setThinking").value,
       text_model: $("setTextModel").value,
       image_model: $("setImageModel").value,
+      video_model: $("setVideoModel").value,
     };
     const historyToggle = $("setHistorySummary");
     if (historyToggle) {
@@ -3240,7 +4088,7 @@ F11</span>
       if (narrationVal) body.narration_model = narrationVal;
     }
     const keyVal = $("setKey").value.trim();
-    if (keyVal) body.api_key = keyVal;
+    if (keyVal) body.gemini_api_key = keyVal;
     const grokKeyInput = $("setGrokKey");
     if (grokKeyInput) {
       const grokKeyVal = grokKeyInput.value.trim();
@@ -3304,23 +4152,23 @@ F11</span>
 
   function renderDeveloperInfoModal(payload) {
     const historyMode = String(((payload && payload.history_mode) || 'full')).toLowerCase();
-    const includeScenario = historyMode === 'summary';
+    const includeTurnDetail = historyMode === 'summary';
 
     const assignBlock = (
       element,
       primaryValue,
-      scenarioValue,
+      turnValue,
       primaryHeadingKey,
-      scenarioHeadingKey
+      turnHeadingKey
     ) => {
       if (!element) return;
       const primaryText = formatDevInfoBlock(primaryValue);
-      const scenarioText = formatDevInfoBlock(scenarioValue);
+      const turnText = formatDevInfoBlock(turnValue);
       const primaryIsEmpty = primaryText === t('devInfo.empty');
-      const scenarioIsEmpty = scenarioText === t('devInfo.empty');
+      const turnIsEmpty = turnText === t('devInfo.empty');
       const blocks = [];
       const primaryHeading = primaryHeadingKey ? t(primaryHeadingKey) : '';
-      const scenarioHeading = scenarioHeadingKey ? t(scenarioHeadingKey) : '';
+      const turnHeading = turnHeadingKey ? t(turnHeadingKey) : '';
 
       const withHeading = (heading, text) => {
         if (!text) return text;
@@ -3331,10 +4179,10 @@ F11</span>
         blocks.push(withHeading(primaryHeading, primaryText));
       }
 
-      if (includeScenario && !scenarioIsEmpty) {
-        blocks.push(withHeading(scenarioHeading, scenarioText));
-      } else if (!includeScenario && primaryIsEmpty && !scenarioIsEmpty && blocks.length === 0) {
-        blocks.push(withHeading(scenarioHeading, scenarioText));
+      if (includeTurnDetail && !turnIsEmpty) {
+        blocks.push(withHeading(turnHeading, turnText));
+      } else if (!includeTurnDetail && primaryIsEmpty && !turnIsEmpty && blocks.length === 0) {
+        blocks.push(withHeading(turnHeading, turnText));
       }
 
       if (!blocks.length) {
@@ -3347,17 +4195,17 @@ F11</span>
     assignBlock(
       $("devInfoRequest"),
       payload && payload.request,
-      payload && payload.scenario_request,
-      includeScenario ? 'devInfo.summaryRequestHeading' : null,
-      includeScenario ? 'devInfo.scenarioRequestHeading' : null
+      payload && payload.turn_request,
+      includeTurnDetail ? 'devInfo.summaryRequestHeading' : null,
+      includeTurnDetail ? 'devInfo.turnRequestHeading' : null
     );
 
     assignBlock(
       $("devInfoResponse"),
       extractResponseJson(payload && payload.response),
-      extractResponseJson(payload && payload.scenario_response),
-      includeScenario ? 'devInfo.summaryResponseHeading' : null,
-      includeScenario ? 'devInfo.scenarioResponseHeading' : null
+      extractResponseJson(payload && payload.turn_response),
+      includeTurnDetail ? 'devInfo.summaryResponseHeading' : null,
+      includeTurnDetail ? 'devInfo.turnResponseHeading' : null
     );
   }
 
@@ -3418,6 +4266,18 @@ F11</span>
   };
   $("btnCloseStatsImage").onclick = () => {
     $("statsImageBack").style.display = "none";
+    syncJoinViewModalVisibility();
+  };
+
+  $("btnStatsVideo").onclick = () => {
+    if (state.lastPublic) {
+      updateStats(state.lastPublic.token_usage);
+    }
+    $("statsVideoBack").style.display = "flex";
+    syncJoinViewModalVisibility();
+  };
+  $("btnCloseStatsVideo").onclick = () => {
+    $("statsVideoBack").style.display = "none";
     syncJoinViewModalVisibility();
   };
 
@@ -3503,14 +4363,15 @@ F11</span>
       return;
     }
     const { player_id, auth_token } = await resp.json();
-    state.playerId = player_id;
+    const normalizedId = normalizeId(player_id) || player_id;
+    state.playerId = normalizedId;
     state.playerToken = auth_token;
     state.playerName = nameVal;
     state.playerBackground = backgroundVal;
     state.pendingJoin = true;
     syncNarrationToggle(state.autoTtsEnabled);
     persistPlayerSession({
-      id: player_id,
+      id: normalizedId,
       token: auth_token,
       name: nameVal,
       background: backgroundVal,
@@ -3544,10 +4405,32 @@ F11</span>
 
   // Actions
   const actionBox = $("action");
-  const submitAction = async () => {
+  const submitButton = $("btnSubmit");
+  const ACTION_AUTO_SUBMIT_DELAY_MS = 1500;
+  const ACTION_AUTO_SUBMIT_RETRY_MS = 250;
+  let actionAutoSubmitTimer = null;
+  let actionSubmitInFlight = false;
+  let actionDirtySinceSubmit = false;
+  let lastSubmittedAction = { text: '', turn: null };
+  const clearActionAutoSubmitTimer = () => {
+    if (actionAutoSubmitTimer) {
+      window.clearTimeout(actionAutoSubmitTimer);
+      actionAutoSubmitTimer = null;
+    }
+  };
+  const submitAction = async (options = {}) => {
+    const force = Boolean(options.force);
     if (!state.playerId || !state.playerToken || !actionBox) return false;
+    if (actionSubmitInFlight) return false;
     const txt = actionBox.value.trim();
     if (!txt) return false;
+    if (!force && !actionDirtySinceSubmit) return false;
+    const currentTurn = Number.isFinite(state.currentTurn) ? state.currentTurn : null;
+    if (!force && lastSubmittedAction.turn === currentTurn && lastSubmittedAction.text === txt) {
+      return false;
+    }
+    clearActionAutoSubmitTimer();
+    actionSubmitInFlight = true;
     let resp;
     try {
       resp = await fetch("/api/submit", {
@@ -3564,24 +4447,68 @@ F11</span>
         await handleActionError(resp, 'alerts.submitFailed');
         return false;
       }
-      actionBox.value = "";
+      lastSubmittedAction = { text: txt, turn: currentTurn };
+      actionDirtySinceSubmit = false;
       return true;
     } catch (err) {
       const message = err && err.message ? err.message : err;
       alert(t('alerts.submitFailedDetail', { message }));
       return false;
+    } finally {
+      actionSubmitInFlight = false;
     }
   };
-  $("btnSubmit").onclick = submitAction;
+  const triggerAutoSubmit = () => {
+    if (!actionBox || !actionBox.value.trim()) {
+      actionAutoSubmitTimer = null;
+      return;
+    }
+    if (actionSubmitInFlight) {
+      actionAutoSubmitTimer = window.setTimeout(triggerAutoSubmit, ACTION_AUTO_SUBMIT_RETRY_MS);
+      return;
+    }
+    actionAutoSubmitTimer = null;
+    submitAction();
+  };
+  const scheduleAutoSubmit = () => {
+    if (!actionBox) return;
+    clearActionAutoSubmitTimer();
+    const currentValue = actionBox.value;
+    const trimmed = currentValue.trim();
+    if (!trimmed) {
+      actionDirtySinceSubmit = false;
+      return;
+    }
+    const currentTurn = Number.isFinite(state.currentTurn) ? state.currentTurn : null;
+    const isNewContent = lastSubmittedAction.turn !== currentTurn || lastSubmittedAction.text !== trimmed;
+    actionDirtySinceSubmit = isNewContent;
+    if (!isNewContent) return;
+    actionAutoSubmitTimer = window.setTimeout(triggerAutoSubmit, ACTION_AUTO_SUBMIT_DELAY_MS);
+  };
+  if (submitButton) {
+    submitButton.onclick = (ev) => {
+      if (ev && typeof ev.preventDefault === 'function') {
+        ev.preventDefault();
+      }
+      submitAction({ force: true });
+    };
+  }
   if (actionBox) {
+    actionBox.addEventListener("input", scheduleAutoSubmit);
+    actionBox.addEventListener("blur", () => {
+      submitAction();
+    });
     actionBox.addEventListener("keydown", async (ev) => {
       if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
         ev.preventDefault();
-        const didSubmit = await submitAction();
+        clearActionAutoSubmitTimer();
+        const didSubmit = await submitAction({ force: true });
         if (didSubmit) {
           const btnNextTurn = $("btnNextTurn");
           if (btnNextTurn) btnNextTurn.click();
         }
+      } else if (ev.key === "Escape") {
+        clearActionAutoSubmitTimer();
       }
     });
   }
@@ -3638,7 +4565,16 @@ F11</span>
           return;
         }
         const result = await resp.json();
-        syncSceneImageToggle(result && result.auto_image_enabled);
+        if (result && Object.prototype.hasOwnProperty.call(result, 'auto_image_enabled')) {
+          syncSceneImageToggle(result.auto_image_enabled);
+        } else {
+          syncSceneImageToggle(nextState);
+        }
+        if (result && Object.prototype.hasOwnProperty.call(result, 'auto_video_enabled')) {
+          syncSceneVideoToggle(result.auto_video_enabled);
+        } else if (nextState) {
+          syncSceneVideoToggle(false);
+        }
       } catch (err) {
         const message = err && err.message ? err.message : err;
         alert(t('alerts.toggleImageFailedDetail', { message }));
@@ -3648,6 +4584,92 @@ F11</span>
           imageButton.removeAttribute("disabled");
         }
         imageButton.disabled = !state.playerId || Boolean(state.lock && state.lock.active);
+      }
+    });
+  }
+
+  const animateImageButton = $("btnAnimateImage");
+  if (animateImageButton) {
+    animateImageButton.addEventListener("click", async () => {
+      if (!state.playerId || !state.playerToken) {
+        alert(t('alerts.joinControlImage'));
+        return;
+      }
+      animateImageButton.setAttribute("disabled", "true");
+      startButtonCountdown('btnAnimateImage', (seconds) => t('common.workingCountdown', { seconds }));
+      try {
+        const resp = await fetch("/api/animate_scene", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            player_id: state.playerId,
+            token: state.playerToken,
+          }),
+        });
+        if (!resp.ok) {
+          await handleActionError(resp, 'alerts.animateFailed');
+          return;
+        }
+        await resp.json().catch(() => null);
+      } catch (err) {
+        const message = err && err.message ? err.message : err;
+        alert(t('alerts.animateFailedDetail', { message }));
+      } finally {
+        stopButtonCountdown('btnAnimateImage');
+        const busy = Boolean(state.lock && state.lock.active);
+        if (!busy) {
+          animateImageButton.removeAttribute('disabled');
+          animateImageButton.setAttribute('title', t('sidebar.animateImageTitle'));
+        }
+        animateImageButton.disabled = !state.playerId || Boolean(state.lock && state.lock.active);
+      }
+    });
+  }
+
+  const animateButton = $("btnAnimateScene");
+  if (animateButton) {
+    syncSceneVideoToggle(state.autoVideoEnabled);
+    animateButton.addEventListener("click", async () => {
+      if (!state.playerId || !state.playerToken) {
+        alert(t('alerts.joinControlImage'));
+        return;
+      }
+      const nextState = !state.autoVideoEnabled;
+      animateButton.setAttribute("disabled", "true");
+      try {
+        const resp = await fetch("/api/video_toggle", {
+          method: "POST",
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            player_id: state.playerId,
+            token: state.playerToken,
+            enabled: nextState,
+          }),
+        });
+        if (!resp.ok) {
+          await handleActionError(resp, 'alerts.toggleVideoFailed');
+          return;
+        }
+        const result = await resp.json();
+        if (result && Object.prototype.hasOwnProperty.call(result, 'auto_video_enabled')) {
+          syncSceneVideoToggle(result.auto_video_enabled);
+        } else {
+          syncSceneVideoToggle(nextState);
+        }
+        if (result && Object.prototype.hasOwnProperty.call(result, 'auto_image_enabled')) {
+          syncSceneImageToggle(result.auto_image_enabled);
+        } else if (nextState) {
+          syncSceneImageToggle(false);
+        }
+      } catch (err) {
+        const message = err && err.message ? err.message : err;
+        alert(t('alerts.toggleVideoFailedDetail', { message }));
+      } finally {
+        const busy = Boolean(state.lock && state.lock.active);
+        if (!busy) {
+          animateButton.removeAttribute('disabled');
+        }
+        animateButton.disabled = !state.playerId || Boolean(state.lock && state.lock.active);
       }
     });
   }
@@ -3793,6 +4815,7 @@ F11</span>
       lastLanguageSync = serverLanguage;
     }
     state.autoImageEnabled = Boolean(s && s.auto_image_enabled);
+    state.autoVideoEnabled = Boolean(s && s.auto_video_enabled);
     syncNarrationToggle(Boolean(s && s.auto_tts_enabled));
     refreshJoinGuidance();
     if (state.pendingJoin === true && state.playerId && state.playerToken) {
@@ -3802,57 +4825,61 @@ F11</span>
     if (Number.isFinite(turnVal)) {
       updateTurnHeader(turnVal);
     }
-    const scenarioEl = $("scenario");
-    if (scenarioEl) {
-      const previousTurn = typeof previousPublic?.turn_index === 'number' ? previousPublic.turn_index : null;
-      const previousTextRaw = typeof previousPublic?.current_scenario === 'string' ? previousPublic.current_scenario : '';
+    const previousTurn = typeof previousPublic?.turn_index === 'number' ? previousPublic.turn_index : null;
+    const turnChanged = Number.isFinite(turnVal) && previousTurn !== turnVal;
+    const completedTurn = Number.isFinite(turnVal) ? turnVal - 1 : null;
+    const hasCompletedTurn = typeof completedTurn === 'number' && completedTurn >= 0;
+    const historyRecords = Array.isArray(s.history) ? s.history : [];
+    renderNarrativeHistory(historyRecords);
+    const narrativeEl = $("narrative");
+    if (narrativeEl) {
+      const previousTextRaw = typeof previousPublic?.current_narrative === 'string' ? previousPublic.current_narrative : '';
       const previousTrimmed = previousTextRaw.trim();
-      const text = typeof s.current_scenario === 'string' ? s.current_scenario : '';
+      const text = typeof s.current_narrative === 'string' ? s.current_narrative : '';
       const trimmedText = text.trim();
       const hasText = trimmedText.length > 0;
-      const targetTurn = Number.isFinite(turnVal) && (turnVal > 0 || hasText) ? turnVal : null;
+      const targetTurn = hasCompletedTurn ? completedTurn : null;
 
       if (targetTurn != null) {
-        const block = getScenarioBlock(targetTurn, hasText);
+        const block = getNarrativeBlock(targetTurn, hasText);
         if (block) {
           block.textContent = hasText ? text : '—';
         }
-      } else if (!scenarioEl.dataset.historyReady) {
-        scenarioEl.textContent = hasText ? text : '—';
+      } else if (!narrativeEl.dataset.historyReady) {
+        narrativeEl.textContent = hasText ? text : '—';
       }
 
-      const turnChanged = Number.isFinite(turnVal) && previousTurn !== turnVal;
       const textChanged = trimmedText !== previousTrimmed;
       if (turnChanged) {
-        scenarioScrollState.lastTurnScrolled = null;
+        narrativeScrollState.lastTurnScrolled = null;
       }
       if ((turnChanged || textChanged) && hasText) {
-        const shouldStick = scenarioIsPinnedToBottom(scenarioEl);
+        const shouldStick = narrativeIsPinnedToTop(narrativeEl);
         if (shouldStick) {
-          const alreadyScrolled = Number.isFinite(turnVal) && scenarioScrollState.lastTurnScrolled === turnVal;
+          const alreadyScrolled = hasCompletedTurn && narrativeScrollState.lastTurnScrolled === targetTurn;
           if (!alreadyScrolled) {
-            scrollScenarioToBottom();
-            scenarioScrollState.lastTurnScrolled = Number.isFinite(turnVal) ? turnVal : null;
+            scrollNarrativeToTop();
+            narrativeScrollState.lastTurnScrolled = hasCompletedTurn ? targetTurn : null;
           }
         }
       }
     }
+    if (turnChanged && actionBox) {
+      actionBox.value = '';
+      actionDirtySinceSubmit = false;
+      lastSubmittedAction = { text: '', turn: Number.isFinite(turnVal) ? turnVal : null };
+      clearActionAutoSubmitTimer();
+    }
     updateStats(s.token_usage);
     setLockBanner(s.lock || {active:false});
     syncSceneImageToggle(state.autoImageEnabled);
-
-    const ul = $("submissions");
-    ul.innerHTML = "";
-    (s.submissions || []).forEach(item => {
-      const li = document.createElement("li");
-      li.textContent = `${item.name}: ${item.text}`;
-      ul.appendChild(li);
-    });
+    syncSceneVideoToggle(state.autoVideoEnabled);
 
     const pl = $("players");
     pl.innerHTML = "";
     hidePortraitPreview();
     const lockActive = Boolean(state.lock && state.lock.active);
+    const activeLeaveIds = new Set();
     (s.players || []).forEach((p) => {
       const li = document.createElement("li");
 
@@ -3862,8 +4889,13 @@ F11</span>
       const portraitBtn = document.createElement("button");
       portraitBtn.type = "button";
       portraitBtn.className = "player-portrait";
-      portraitBtn.dataset.playerId = p.id || "";
-      const isYou = Boolean(state.playerId && p.id && state.playerId === p.id);
+      const playerId = normalizeId(p.id);
+      const playerIdAttr = playerId || '';
+      portraitBtn.dataset.playerId = playerIdAttr;
+      if (playerId) {
+        activeLeaveIds.add(playerId);
+      }
+      const isYou = Boolean(state.playerId && playerId && state.playerId === playerId);
       portraitBtn.dataset.owned = isYou ? "true" : "false";
       portraitBtn.dataset.pending = p.pending_join ? "true" : "false";
       const portrait = p.portrait || null;
@@ -3912,6 +4944,18 @@ F11</span>
       status.className = `${pillClass(p.status_word)} player-status`;
       nameRow.appendChild(status);
 
+      const submissionText = typeof p.submission === 'string' ? p.submission.trim() : '';
+      const actionEl = document.createElement("div");
+      actionEl.className = "player-action";
+      if (submissionText) {
+        const prefix = t('game.playerAction.prefix');
+        actionEl.textContent = `${prefix}${submissionText}`;
+        actionEl.classList.add("has-submission");
+      } else {
+        actionEl.textContent = t('game.playerAction.none');
+      }
+      nameRow.appendChild(actionEl);
+
       nameWrap.appendChild(nameRow);
 
       const cls = document.createElement("div");
@@ -3927,7 +4971,7 @@ F11</span>
         joinTag.textContent = t('game.playerTag.joining');
         tags.appendChild(joinTag);
       }
-      if (p.pending_leave) {
+      if (shouldShowLeaveNotice(playerId, p.pending_leave)) {
         const leaveTag = document.createElement("span");
         leaveTag.className = "pill bad";
         leaveTag.textContent = t('game.playerTag.departing');
@@ -3944,15 +4988,122 @@ F11</span>
       pl.appendChild(li);
     });
 
+    const youId = state.lastPrivate && state.lastPrivate.you ? normalizeId(state.lastPrivate.you.id) : null;
+    if (youId) {
+      activeLeaveIds.add(youId);
+    }
+    pruneLeaveNoticeState(activeLeaveIds);
+
     const img = $("scene");
-    if (s.image && s.image.data_url) {
-      img.src = s.image.data_url;
-      img.title = s.image.prompt || "";
-      img.style.display = "";
+    const videoEl = $("sceneVideo");
+    const animateBtn = $("btnAnimateScene");
+    const animateImageBtn = $("btnAnimateImage");
+    const sceneImage = s.image && typeof s.image === 'object' ? s.image : null;
+    const sceneVideo = s.video && typeof s.video === 'object' ? s.video : null;
+    const hasImage = Boolean(sceneImage && sceneImage.data_url);
+    const hasVideo = Boolean(sceneVideo && sceneVideo.url);
+
+    if (hasVideo && videoEl) {
+      const baseUrl = sceneVideo.url;
+      const stampValue = Number.isFinite(sceneVideo.updated_at) ? Math.floor(sceneVideo.updated_at) : Date.now();
+      const needsUpdate = videoEl.dataset.baseUrl !== baseUrl || videoEl.dataset.cacheToken !== String(stampValue);
+      if (needsUpdate) {
+        const joiner = baseUrl.includes('?') ? '&' : '?';
+        videoEl.src = `${baseUrl}${joiner}v=${stampValue}`;
+        videoEl.dataset.baseUrl = baseUrl;
+        videoEl.dataset.cacheToken = String(stampValue);
+        state.sceneVideoUserPaused = false;
+        delete videoEl.dataset.userPaused;
+      }
+      if (sceneImage && sceneImage.data_url) {
+        videoEl.poster = sceneImage.data_url;
+      } else if (videoEl.poster) {
+        videoEl.removeAttribute('poster');
+      }
+      const autoplayMuted = videoEl.dataset.autoplayMuted === 'true';
+      if (!autoplayMuted) {
+        videoEl.defaultMuted = false;
+        videoEl.muted = false;
+        if (typeof videoEl.volume === 'number') {
+          videoEl.volume = 1;
+        }
+        if (videoEl.hasAttribute('muted')) {
+          videoEl.removeAttribute('muted');
+        }
+      }
+      videoEl.title = sceneVideo.prompt || '';
+      videoEl.classList.remove('hidden');
+      videoEl.style.display = '';
+      ensureSceneVideoAutoplays(videoEl);
+      state.sceneVideoUrl = baseUrl;
+      state.sceneVideoToken = String(stampValue);
+      if (img) {
+        img.removeAttribute('src');
+        img.title = '';
+        img.style.display = 'none';
+      }
     } else {
-      img.removeAttribute("src");
-      img.title = "";
-      img.style.display = "none";
+      state.sceneVideoUrl = null;
+      state.sceneVideoToken = null;
+      state.sceneVideoUserPaused = false;
+      if (videoEl) {
+        try {
+          ignoreSceneVideoPause = true;
+          videoEl.pause();
+        } catch (err) {
+          /* ignore */
+        } finally {
+          ignoreSceneVideoPause = false;
+        }
+        videoEl.removeAttribute('src');
+        videoEl.removeAttribute('poster');
+        delete videoEl.dataset.baseUrl;
+        delete videoEl.dataset.cacheToken;
+        delete videoEl.dataset.autoplayMuted;
+        delete videoEl.dataset.userPaused;
+        if (typeof videoEl.load === 'function') {
+          videoEl.load();
+        }
+        videoEl.classList.add('hidden');
+        videoEl.style.display = 'none';
+      }
+      if (img) {
+        if (hasImage) {
+          img.src = sceneImage.data_url;
+          img.title = sceneImage.prompt || '';
+          img.style.display = '';
+        } else {
+          img.removeAttribute('src');
+          img.title = '';
+          img.style.display = 'none';
+        }
+      }
+    }
+
+    if (animateImageBtn) {
+      const shouldShow = hasImage;
+      if (shouldShow) {
+        animateImageBtn.classList.remove('hidden');
+        animateImageBtn.style.display = '';
+        animateImageBtn.setAttribute('title', t('sidebar.animateImageTitle'));
+        if (!state.lock || !state.lock.active) {
+          animateImageBtn.removeAttribute('disabled');
+        }
+        if (!animateImageBtn.dataset.defaultLabel) {
+          const label = (animateImageBtn.textContent || '').trim();
+          if (label) {
+            animateImageBtn.dataset.defaultLabel = label;
+          }
+        }
+      } else {
+        animateImageBtn.classList.add('hidden');
+        animateImageBtn.style.display = 'none';
+        stopButtonCountdown('btnAnimateImage');
+      }
+    }
+
+    if (narrativeSizer) {
+      narrativeSizer.resize();
     }
   }
 
@@ -3993,10 +5144,12 @@ F11</span>
     mergeRemovalEntries(removals.abilities, abilityRemoved);
     mergeRemovalEntries(removals.inventory, inventoryRemoved);
     mergeRemovalEntries(removals.conditions, conditionRemoved);
-    if (!state.playerId) {
-      state.playerId = y.id;
+    const youId = normalizeId(y.id);
+    if (!state.playerId && youId) {
+      state.playerId = youId;
       syncNarrationToggle(state.autoTtsEnabled);
       syncSceneImageToggle(state.autoImageEnabled);
+      syncSceneVideoToggle(state.autoVideoEnabled);
     }
     state.playerName = y.name || state.playerName || '';
     if (typeof y.pending_join === 'boolean') {
@@ -4012,7 +5165,7 @@ F11</span>
         joinTag.textContent = t('game.playerFlag.queued');
         youFlags.appendChild(joinTag);
       }
-      if (y.pending_leave) {
+      if (shouldShowLeaveNotice(youId, y.pending_leave)) {
         const leaveTag = document.createElement("span");
         leaveTag.className = "pill bad";
         leaveTag.textContent = t('game.playerFlag.departing');
@@ -4037,6 +5190,9 @@ F11</span>
     const imageData = usageData.image || {};
     const imageLast = imageData.last || {};
     const imageSession = imageData.session || {};
+    const videoData = usageData.video || {};
+    const videoLast = videoData.last || {};
+    const videoSession = videoData.session || {};
     const safeSet = (id, value) => {
       const el = $(id);
       if (el) el.textContent = value;
@@ -4051,6 +5207,11 @@ F11</span>
     const formatTotal = (value) => Number.isFinite(value) ? value.toLocaleString() : "—";
     const formatCurrency = (value, precision = 4) => (
       Number.isFinite(value) ? `$${Number(value).toFixed(precision)}` : "—"
+    );
+    const formatSeconds = (value, fractionDigits = 2) => (
+      Number.isFinite(value)
+        ? Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: fractionDigits })
+        : "—"
     );
     const formatNumber = (value) => (Number.isFinite(value) ? value.toLocaleString() : "—");
     const formatImageTypeCounts = (entries) => {
@@ -4121,6 +5282,28 @@ F11</span>
     const sessionCounts = formatImageTypeCounts(imageSession.by_kind);
     safeSet("statsImageSessionCounts", sessionCounts);
 
+    const videoTurnCostValue = Number.isFinite(breakdown.video_last_turn_usd)
+      ? breakdown.video_last_turn_usd
+      : videoLast.cost_usd;
+    safeSet("statsVideoCostLast", formatCurrency(videoTurnCostValue));
+    safeSet("statsVideoCostSession", formatCurrency(videoSession.cost_usd));
+    let videoModelLabel = videoLast.model || "";
+    if (videoModelLabel) {
+      const tier = videoLast.tier;
+      if (tier) {
+        videoModelLabel = `${videoModelLabel} (${tier})`;
+      }
+    } else {
+      videoModelLabel = "—";
+    }
+    safeSet("statsVideoModel", videoModelLabel);
+    safeSet("statsVideoSecondsLast", formatSeconds(videoLast.seconds));
+    safeSet("statsVideoSecondsSession", formatSeconds(videoSession.seconds));
+    safeSet("statsVideoUsdPerSecond", formatCurrency(videoLast.usd_per_second, 4));
+    safeSet("statsVideoAvgUsdPerSecond", formatCurrency(videoSession.avg_usd_per_second, 4));
+    safeSet("statsVideoRequests", formatNumber(videoSession.requests));
+    safeSet("statsVideoAvgSecondsPerRequest", formatSeconds(videoSession.avg_seconds_per_request));
+
     const narrationData = usageData.narration || {};
     const narrationLast = narrationData.last || {};
     const narrationSession = narrationData.session || {};
@@ -4149,7 +5332,7 @@ F11</span>
     const baseLaneIds = new Set(['main', 'sidebar']);
     const maxLanes = 4;
     const draggingClass = 'dragging';
-    const storageKey = 'paneLayout:v2';
+    const storageKey = 'paneLayout:v3';
     let dropZone = null;
 
     const getLanes = () => [...board.querySelectorAll(laneSelector)];
@@ -4375,14 +5558,127 @@ F11</span>
     persist();
   }
 
+  (function () {
+    function px(n) {
+      return `${Math.max(0, Math.floor(n))}px`;
+    }
+
+    function sixLineMin(el) {
+      const cs = getComputedStyle(el);
+      let lh = parseFloat(cs.lineHeight);
+      if (!Number.isFinite(lh)) {
+        lh = (parseFloat(cs.fontSize) || 16) * 1.4;
+      }
+      return Math.ceil(lh * 6);
+    }
+
+    function findColumn(el) {
+      while (el && el !== document.body) {
+        if (el.classList && el.classList.contains('col') && el.hasAttribute('data-pane-group')) {
+          return el;
+        }
+        el = el.parentElement;
+      }
+      return null;
+    }
+
+    function getRowGap(col) {
+      const cs = getComputedStyle(col);
+      return parseFloat(cs.rowGap || cs.gap) || 0;
+    }
+
+    function resizeScenario() {
+      if (document.body.classList.contains('join-screen')) return;
+
+      const narrativeEl = $('narrative');
+      if (!narrativeEl) return;
+
+      const narrativeCard = narrativeEl.closest('.card[data-pane-id="narrative"]');
+      const col = narrativeCard ? findColumn(narrativeCard) : null;
+      const wrap = document.querySelector('.wrap');
+      if (!narrativeCard || !col || !wrap) return;
+
+      const wrapCS = getComputedStyle(wrap);
+      const padBottom = parseFloat(wrapCS.paddingBottom) || 0;
+      const colRect = col.getBoundingClientRect();
+      let available = window.innerHeight - colRect.top - padBottom;
+      available = Math.max(0, available);
+
+      const cards = Array.from(col.querySelectorAll('.card[data-pane-id]'));
+      const gap = getRowGap(col);
+      const gapsTotal = Math.max(cards.length - 1, 0) * gap;
+
+      let otherHeights = 0;
+      for (const c of cards) {
+        if (c === narrativeCard) continue;
+        otherHeights += c.getBoundingClientRect().height;
+      }
+
+      const cardRect = narrativeCard.getBoundingClientRect();
+      const narrativeRect = narrativeEl.getBoundingClientRect();
+      const chrome = cardRect.height - narrativeRect.height;
+
+      const minH = sixLineMin(narrativeEl);
+      let target = available - otherHeights - gapsTotal - chrome;
+      target = Math.max(minH, target);
+
+      narrativeEl.style.minHeight = px(minH);
+      narrativeEl.style.maxHeight = px(target);
+      narrativeEl.style.height = px(target);
+    }
+
+    narrativeSizer = {
+      _initialized: false,
+      _resizeObserver: null,
+      _mutationObserver: null,
+      resize: resizeScenario,
+      init() {
+        resizeScenario();
+        if (narrativeSizer._initialized) return;
+        narrativeSizer._initialized = true;
+
+        window.addEventListener('resize', resizeScenario);
+        window.addEventListener('orientationchange', resizeScenario);
+
+        if (typeof ResizeObserver === 'function') {
+          const ro = new ResizeObserver(resizeScenario);
+          narrativeSizer._resizeObserver = ro;
+          ['body', '.wrap', '#gameView'].forEach((sel) => {
+            const el = document.querySelector(sel);
+            if (el) ro.observe(el);
+          });
+        }
+
+        if (typeof MutationObserver === 'function') {
+          const mo = new MutationObserver(resizeScenario);
+          narrativeSizer._mutationObserver = mo;
+          const board = document.querySelector('main.wrap');
+          if (board) {
+            mo.observe(board, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+          }
+        }
+      },
+      resizeNow: resizeScenario,
+    };
+
+    window.narrativeSizer = narrativeSizer;
+  })();
+
   enablePaneReorder();
 
+  if (narrativeSizer) {
+    narrativeSizer.init();
+  }
+
   function initClient() {
+    setupSceneVideoPersistence();
+    loadJoinBackgrounds();
     state.joinBackgroundUrl = pickJoinBackground();
     applyJoinBackground(state.joinBackgroundUrl);
     showJoinView();
     setJoinWaiting(false);
     updateJoinStatus("");
+    loadJoinMusicLibrary();
     const stored = getStoredPlayer();
     if (stored) {
       applyStoredJoinInputs(stored);
@@ -4393,7 +5689,8 @@ F11</span>
         state.playerBackground = stored.background;
       }
       if (stored.id && stored.token) {
-        state.playerId = stored.id;
+        const restoredId = normalizeId(stored.id);
+        state.playerId = restoredId || stored.id;
         state.playerToken = stored.token;
         state.pendingJoin = typeof stored.pending === 'boolean' ? stored.pending : null;
         syncNarrationToggle(state.autoTtsEnabled);

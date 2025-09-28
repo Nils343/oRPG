@@ -1,0 +1,9 @@
+skips:
+  - B101
+exclude_dirs:
+  - generated_media
+  - static
+  - tests
+targets:
+  - rpg.py
+  - scripts

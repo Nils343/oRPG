@@ -1,0 +1,6 @@
+pre-commit>=4.3.0
+ruff>=0.13.2
+mypy>=1.18.2
+bandit>=1.8.6
+coverage>=7.0
+pytest-cov>=7.0
