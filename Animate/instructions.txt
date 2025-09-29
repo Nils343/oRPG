@@ -1,0 +1,121 @@
+FramePack Studio API notes for turning a still image into an animated clip via gradio_client.
+
+Prerequisites
+1. Launch FramePack Studio locally (Pinokio shows the port, e.g. http://127.0.0.1:7860) and keep it running.
+2. Install the client once: pip install gradio-client
+
+Connecting
+- from gradio_client import Client, handle_file
+- Client("http://127.0.0.1:7860", download_files="downloads")
+  * download_files is optional; when supplied, FramePack outputs are auto-downloaded into that directory.
+- client.view_api() prints all available endpoints. The ones relevant for image-to-video are /handle_start_button (submit job) and /monitor_job (poll job state).
+
+Submitting a job
+- /handle_start_button expects 28 positional arguments. The defaults discovered 2025-09-28 are:
+  selected_model="Original"
+  param_1 = start frame image (use handle_file("path/to.png"))
+  param_2 = video input (None for image-only)
+  param_3 = end frame image (None unless you want to blend toward an end frame)
+  param_4..param_28 = numeric or boolean settings (video length, steps, CFG, caching, resolution, etc.)
+- Any parameter you do not want to change can stay at the default; pass explicit values to keep argument order aligned.
+- Example call:
+
+result = client.predict(
+    "Original",                 # Generation Type
+    handle_file("test.png"),    # Start Frame
+    None,                        # Video Input
+    None,                        # End Frame
+    1.0,                         # End Frame Influence
+    "Gentle animation...",      # Prompt
+    "",                         # Negative Prompt
+    2500,                        # Seed
+    False,                       # Randomize
+    6,                           # Video length seconds
+    9,                           # Latent window size
+    25,                          # Steps
+    1.0,                         # CFG scale
+    10.0,                        # Distilled CFG scale
+    0.0,                         # CFG rescale
+    "MagCache",                 # Caching strategy
+    25,                          # TeaCache steps
+    0.15,                        # TeaCache rel_l1_thresh
+    0.1,                         # MagCache threshold
+    2,                           # MagCache max skips
+    0.25,                        # MagCache retention
+    4,                           # Blend sections
+    "Noise",                    # Latent image seed
+    True,                        # Clean up video files
+    [],                          # Select LoRAs to load
+    640,                         # Width
+    640,                         # Height
+    False,                       # Combine with source video
+    5,                           # Number of context frames
+    api_name="/handle_start_button"
+)
+
+- The tuple returned places the job id in element 1 (index 1). Example: job_id = result[1]
+
+Monitoring completion
+- Poll /monitor_job with the job id until status becomes "Completed".
+
+poll = client.predict(job_id, api_name="/monitor_job")
+status = poll[3]  # 'Completed' when done
+
+- Element 0 of the poll result contains a dict with the video path. With download_files set, that path points inside the chosen download directory. Without it, the path is the remote server temp path; you would need a manual HTTP GET or to re-instantiate Client with download_files before polling.
+
+Retrieving the clip
+- When using download_files="downloads", the MP4 lands at downloads/<hash>/file=<remote_path>. Copy or move it to a friendly filename, e.g. shutil.copyfile(src, "framepack_output.mp4").
+
+Putting it together
+
+from pathlib import Path
+from gradio_client import Client, handle_file
+
+client = Client("http://127.0.0.1:7860", download_files="downloads")
+result = client.predict(
+    "Original",
+    handle_file("test.png"),
+    None,
+    None,
+    1.0,
+    "Gentle animation of the provided scene with subtle motion and depth cues",
+    "",
+    2500,
+    False,
+    6,
+    9,
+    25,
+    1.0,
+    10.0,
+    0.0,
+    "MagCache",
+    25,
+    0.15,
+    0.1,
+    2,
+    0.25,
+    4,
+    "Noise",
+    True,
+    [],
+    640,
+    640,
+    False,
+    5,
+    api_name="/handle_start_button",
+)
+job_id = result[1]
+
+poll = client.predict(job_id, api_name="/monitor_job")
+status = poll[3]
+assert status == "Completed", status
+video_info = poll[0]
+local_path = Path(video_info["video"])
+out_file = Path("framepack_output.mp4")
+out_file.write_bytes(local_path.read_bytes())
+print(f"Saved animation to {out_file.resolve()}")
+
+Notes
+- Defaults may change between Studio releases; call client.view_api() to refresh parameter names and defaults.
+- Keep FramePack Studio running while polling; if the server restarts mid-job, the job id becomes invalid.
+- For longer clips, expect /monitor_job to take several minutes before returning "Completed".
