@@ -20,6 +20,17 @@ Thumbs.db
 # Logs
 *.log
 
+# Node modules
+node_modules/
+
+# Coverage reports
+.coverage
+coverage/
+coverage-*/
+
+# Generated media
+generated_media/
+
 # Local secrets
 settings.json
 github_credentials.txt
