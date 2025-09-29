@@ -225,6 +225,20 @@ def _suffix_from_mime(mime: Optional[str]) -> str:
     return ".bin"
 
 
+def _unique_media_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    directory = path.parent
+    counter = 1
+    while True:
+        candidate = directory / f"{stem}_{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def _is_framepack_model(model: Optional[str]) -> bool:
     if not model:
         return False
@@ -3834,6 +3848,7 @@ async def generate_scene_video(
     GENERATED_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"scene_{int(time.time())}_{secrets.token_hex(4)}.mp4"
     output_path = GENERATED_MEDIA_DIR / filename
+    output_path = _unique_media_path(output_path)
     result_model = normalized_model
 
     if _is_framepack_model(normalized_model):

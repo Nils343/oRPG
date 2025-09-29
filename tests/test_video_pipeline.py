@@ -579,6 +579,58 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.model, rpg.FRAMEPACK_MODEL_ID)
 
+    async def test_scene_video_generation_avoids_overwriting_files(self) -> None:
+        class DummyOperation:
+            def __init__(self) -> None:
+                self.done = True
+                self.error = None
+                class _Video:
+                    @staticmethod
+                    def save(path: str) -> None:
+                        Path(path).write_bytes(b"vid")
+
+                self.response = types.SimpleNamespace(
+                    generated_videos=[types.SimpleNamespace(video=_Video())]
+                )
+
+        class DummyClient:
+            def __init__(self, api_key: str) -> None:
+                self.api_key = api_key
+                self.models = types.SimpleNamespace(generate_videos=lambda **kwargs: DummyOperation())
+                self.operations = types.SimpleNamespace(get=lambda op: op)
+                self.files = types.SimpleNamespace(download=lambda file: None)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_dir = Path(tmp_dir) / "app"
+            static_dir = app_dir / "static"
+            generated_dir = Path(tmp_dir) / "generated"
+            other_dir = Path(tmp_dir) / "other"
+            static_dir.mkdir(parents=True)
+            generated_dir.mkdir(parents=True)
+            other_dir.mkdir(parents=True)
+
+            with (
+                mock.patch.object(rpg, "APP_DIR", app_dir),
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", generated_dir),
+                mock.patch.object(rpg, "genai", types.SimpleNamespace(Client=DummyClient)),
+                mock.patch.object(rpg, "genai_types", types.SimpleNamespace(Image=lambda *args, **kwargs: None)),
+                mock.patch("rpg.require_gemini_api_key", return_value="key"),
+                mock.patch("rpg.record_video_usage"),
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=1.0),
+                mock.patch("rpg.asyncio.to_thread", side_effect=lambda func, *a, **kw: func()),
+                mock.patch("rpg.secrets.token_hex", return_value="abcd"),
+                mock.patch("rpg.time.time", return_value=1000.0),
+            ):
+                first = await rpg.generate_scene_video("Prompt")
+                first_path = Path(first.file_path)
+                self.assertTrue(first_path.exists())
+
+                second = await rpg.generate_scene_video("Prompt")
+                second_path = Path(second.file_path)
+                self.assertTrue(second_path.exists())
+
+                self.assertNotEqual(first_path, second_path)
+
     async def test_framepack_duration_clamped_to_bounds(self) -> None:
         captured_duration: list[float] = []
 
