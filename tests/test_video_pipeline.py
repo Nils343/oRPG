@@ -486,10 +486,30 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(video.url.startswith("/generated_media/scene_1000_abcd"))
 
-    async def test_framepack_requires_reference_image(self) -> None:
-        with self.assertRaises(rpg.HTTPException) as excinfo:
-            await rpg.generate_scene_video("Prompt", model=rpg.FRAMEPACK_MODEL_ID)
-        self.assertEqual(excinfo.exception.status_code, 400)
+    async def test_framepack_allows_missing_reference_image(self) -> None:
+        async def fake_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+            requested_duration: float,
+        ) -> None:
+            output_path.write_bytes(b"mp4data")
+            self.assertIsNone(image_data_url)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_framepack),
+                mock.patch("rpg.record_video_usage"),
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=1.5),
+                mock.patch("rpg.time.time", side_effect=[1000.0, 1001.0]),
+            ):
+                video = await rpg.generate_scene_video("Prompt", model=rpg.FRAMEPACK_MODEL_ID)
+
+        self.assertEqual(video.model, rpg.FRAMEPACK_MODEL_ID)
 
     async def test_framepack_generation_writes_file(self) -> None:
         captured_duration: list[float] = []
@@ -738,3 +758,41 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rpg.game_state.last_video_prompt, "Prompt")
         self.assertEqual(rpg.game_state.last_video_negative_prompt, "neg")
         self.assertEqual(rpg.game_state.last_scene_video_turn_index, 3)
+
+    async def test_framepack_auto_mode_runs_without_image(self) -> None:
+        rpg.game_state.settings["video_model"] = rpg.FRAMEPACK_MODEL_ID
+
+        new_video = rpg.SceneVideo(
+            url="/generated_media/fp.mp4",
+            prompt="Prompt",
+            negative_prompt=None,
+            model=rpg.FRAMEPACK_MODEL_ID,
+            updated_at=3.0,
+            file_path="/tmp/fp.mp4",
+        )
+
+        tasks: list[asyncio.Task] = []
+        loop = asyncio.get_running_loop()
+
+        def create_task_side_effect(coro):
+            task = loop.create_task(coro)
+            tasks.append(task)
+            return task
+
+        async def fake_sleep(_: float) -> None:
+            return None
+
+        with (
+            mock.patch("rpg.generate_scene_video", new=mock.AsyncMock(return_value=new_video)) as gen_mock,
+            mock.patch("rpg._clear_scene_video"),
+            mock.patch("rpg.announce", new=mock.AsyncMock()),
+            mock.patch("rpg.broadcast_public", new=mock.AsyncMock()),
+            mock.patch("rpg.asyncio.create_task", side_effect=create_task_side_effect),
+            mock.patch("rpg.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            await rpg.schedule_auto_scene_video("Prompt", 5)
+            await asyncio.gather(*tasks)
+
+        gen_mock.assert_awaited_once()
+        args, _ = gen_mock.await_args
+        self.assertEqual(args[1], rpg.FRAMEPACK_MODEL_ID)

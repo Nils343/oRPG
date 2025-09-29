@@ -244,14 +244,10 @@ def _load_framepack_module():
         ) from exc
 
 
-def _resolve_framepack_image(image_data_url: Optional[str]) -> Tuple[bytes, str]:
-    data_url = image_data_url or game_state.last_image_data_url
-    if not data_url:
-        raise HTTPException(
-            status_code=400,
-            detail="FramePack requires a reference image. Generate an image before animating.",
-        )
-    parsed = _parse_data_url(data_url)
+def _resolve_framepack_image(image_data_url: Optional[str]) -> Optional[Tuple[bytes, str]]:
+    if not image_data_url:
+        return None
+    parsed = _parse_data_url(image_data_url)
     if not parsed:
         raise HTTPException(status_code=400, detail="FramePack reference image data URL is invalid.")
     mime, b64_data = parsed
@@ -2577,6 +2573,8 @@ async def schedule_auto_scene_video(
     if not game_state.auto_video_enabled:
         return
 
+    model_setting = game_state.settings.get("video_model")
+
     prompt_text = (prompt or game_state.last_video_prompt or game_state.last_image_prompt or "").strip()
     if not prompt_text:
         return
@@ -2634,7 +2632,7 @@ async def schedule_auto_scene_video(
             try:
                 new_video = await generate_scene_video(
                     current_prompt,
-                    game_state.settings.get("video_model"),
+                    model_setting,
                     negative_prompt=current_negative,
                     turn_index=turn_index,
                 )
@@ -3723,7 +3721,6 @@ async def _generate_framepack_video(
     negative_prompt: Optional[str],
     requested_duration: float,
 ) -> None:
-    image_bytes, suffix = _resolve_framepack_image(image_data_url)
     module = _load_framepack_module()
     negative_value = (negative_prompt or "").strip()
 
@@ -3738,11 +3735,16 @@ async def _generate_framepack_video(
     if not isinstance(model_variant, str) or not model_variant:
         model_variant = FRAMEPACK_DEFAULT_VARIANT
 
+    resolved_image = _resolve_framepack_image(image_data_url)
+
     def _run() -> None:
         with tempfile.TemporaryDirectory(prefix="framepack_src_") as temp_dir_name:
             temp_dir = Path(temp_dir_name)
-            source_path = temp_dir / f"framepack_source{suffix}"
-            source_path.write_bytes(image_bytes)
+            source_path: Optional[Path] = None
+            if resolved_image is not None:
+                image_bytes, suffix = resolved_image
+                source_path = temp_dir / f"framepack_source{suffix}"
+                source_path.write_bytes(image_bytes)
 
             auto_download = os.name != "nt"
             download_setting = temp_dir if auto_download else False
