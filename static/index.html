@@ -3916,6 +3916,10 @@ F11</span>
             videoOptions.push({ value: rawName, label: rawName, helper: baseLabel });
           });
 
+          if (!videoOptions.some(entry => entry.value.toLowerCase() === 'framepack')) {
+            videoOptions.push({ value: 'FramePack', label: 'FramePack', helper: 'FramePack' });
+          }
+
           videoOptions.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
           videoOptions.forEach(entry => {
             const opt = document.createElement('option');

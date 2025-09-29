@@ -13,11 +13,14 @@ import base64
 import binascii
 import copy
 import hashlib
+import importlib
+import inspect
 import json
 import os
 import re
 import secrets
 import sys
+import tempfile
 import time
 import unicodedata
 from contextlib import asynccontextmanager
@@ -115,6 +118,9 @@ SUPPORTED_LANGUAGES = {"en", "de"}
 DEFAULT_TEXT_TEMPERATURE = 0.2
 
 DEFAULT_VIDEO_MODEL = "veo-3.0-generate-001"
+FRAMEPACK_MODEL_ID = "FramePack"
+FRAMEPACK_DEFAULT_DURATION_SECONDS = 8.0
+FRAMEPACK_DEFAULT_VARIANT = "Original"
 
 HISTORY_MODE_FULL = "full"
 HISTORY_MODE_SUMMARY = "summary"
@@ -213,6 +219,45 @@ def _suffix_from_mime(mime: Optional[str]) -> str:
         if subtype:
             return f".{subtype}"
     return ".bin"
+
+
+def _is_framepack_model(model: Optional[str]) -> bool:
+    if not model:
+        return False
+    return str(model).strip().lower() == FRAMEPACK_MODEL_ID.lower()
+
+
+def _load_framepack_module():
+    try:
+        return importlib.import_module("Animate.animate_framepack")
+    except ImportError as exc:  # pragma: no cover - depends on optional dependency
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "FramePack integration is unavailable because its dependencies are missing. "
+                "Install the optional requirements to enable FramePack video generation."
+            ),
+        ) from exc
+
+
+def _resolve_framepack_image(image_data_url: Optional[str]) -> Tuple[bytes, str]:
+    data_url = image_data_url or game_state.last_image_data_url
+    if not data_url:
+        raise HTTPException(
+            status_code=400,
+            detail="FramePack requires a reference image. Generate an image before animating.",
+        )
+    parsed = _parse_data_url(data_url)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="FramePack reference image data URL is invalid.")
+    mime, b64_data = parsed
+    image_bytes = _decode_base64_data(b64_data)
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="FramePack reference image could not be decoded.")
+    suffix = _suffix_from_mime(mime or "image/png") or ".png"
+    if suffix == ".bin":
+        suffix = ".png"
+    return image_bytes, suffix
 
 
 def _decode_base64_data(b64_data: str) -> Optional[bytes]:
@@ -3619,6 +3664,100 @@ async def gemini_generate_image(
     raise HTTPException(status_code=502, detail="No image data returned by model.")
 
 
+async def _generate_framepack_video(
+    prompt_text: str,
+    *,
+    output_path: Path,
+    image_data_url: Optional[str],
+    negative_prompt: Optional[str],
+) -> None:
+    image_bytes, suffix = _resolve_framepack_image(image_data_url)
+    module = _load_framepack_module()
+    negative_value = (negative_prompt or "").strip()
+
+    min_duration = float(getattr(module, "MIN_DURATION_SECONDS", FRAMEPACK_DEFAULT_DURATION_SECONDS))
+    max_duration = float(getattr(module, "MAX_DURATION_SECONDS", FRAMEPACK_DEFAULT_DURATION_SECONDS))
+    duration = FRAMEPACK_DEFAULT_DURATION_SECONDS
+    duration = max(min_duration, min(duration, max_duration))
+    model_variant = getattr(module, "FRAMEPACK_DEFAULT_VARIANT", FRAMEPACK_DEFAULT_VARIANT)
+    if not isinstance(model_variant, str) or not model_variant:
+        model_variant = FRAMEPACK_DEFAULT_VARIANT
+
+    def _run() -> None:
+        with tempfile.TemporaryDirectory(prefix="framepack_src_") as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            source_path = temp_dir / f"framepack_source{suffix}"
+            source_path.write_bytes(image_bytes)
+
+            auto_download = os.name != "nt"
+            download_setting = temp_dir if auto_download else False
+
+            framepack_url = getattr(module, "FRAMEPACK_URL", None)
+            if not isinstance(framepack_url, str) or not framepack_url.strip():
+                raise RuntimeError("FramePack helper missing FRAMEPACK_URL setting")
+
+            client = module.Client(framepack_url, download_files=download_setting)
+            try:
+                submit = getattr(module, "submit_job", None)
+                if not callable(submit):
+                    raise RuntimeError("FramePack helper missing submit_job function")
+
+                submit_args = [client, source_path, prompt_text, duration, model_variant]
+                submit_kwargs: Dict[str, Any] = {}
+                try:
+                    signature = inspect.signature(submit)
+                    if "negative_prompt" in signature.parameters:
+                        submit_kwargs["negative_prompt"] = negative_value
+                except (TypeError, ValueError):
+                    pass
+                job_id = submit(*submit_args, **submit_kwargs)
+
+                monitor = getattr(module, "wait_for_completion", None)
+                if not callable(monitor):
+                    raise RuntimeError("FramePack helper missing wait_for_completion function")
+                monitor_kwargs: Dict[str, Any] = {}
+                try:
+                    monitor_sig = inspect.signature(monitor)
+                    if "verbose" in monitor_sig.parameters:
+                        monitor_kwargs["verbose"] = False
+                except (TypeError, ValueError):
+                    pass
+                video_path = monitor(client, job_id, **monitor_kwargs)
+                ensure_local = getattr(module, "_ensure_local_video", None)
+                if not callable(ensure_local):
+                    raise RuntimeError("FramePack helper missing _ensure_local_video helper")
+                local_video = ensure_local(
+                    client,
+                    video_path,
+                    temp_dir,
+                    job_id,
+                    auto_download=auto_download,
+                )
+                if not local_video:
+                    raise RuntimeError("FramePack job did not return a video path")
+                final_path = Path(local_video)
+                if not final_path.exists():
+                    raise FileNotFoundError(
+                        f"FramePack reported video at {final_path} but it was not found"
+                    )
+                output_path.write_bytes(final_path.read_bytes())
+            finally:
+                close_method = getattr(client, "close", None)
+                if callable(close_method):
+                    close_method()
+                executor = getattr(client, "executor", None)
+                if executor is not None:
+                    executor.shutdown(wait=True, cancel_futures=True)
+
+    try:
+        await asyncio.to_thread(_run)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        detail = str(exc) or "FramePack generation failed"
+        raise HTTPException(status_code=502, detail=f"FramePack generation failed: {detail}") from exc
+
+
 async def generate_scene_video(
     prompt: str,
     model: Optional[str] = None,
@@ -3628,13 +3767,6 @@ async def generate_scene_video(
     turn_index: Optional[int] = None,
 ) -> SceneVideo:
     """Create a scene animation video using the provided prompt and optional reference image."""
-
-    if genai is None:
-        raise HTTPException(status_code=500, detail="google-genai package is not installed on the server.")
-    if genai_types is None:
-        raise HTTPException(status_code=500, detail="google-genai package is missing type definitions.")
-
-    api_key = require_gemini_api_key()
     requested_model = model or game_state.settings.get("video_model") or DEFAULT_VIDEO_MODEL
     normalized_model = str(requested_model).strip() or DEFAULT_VIDEO_MODEL
     prompt_text = (prompt or "").strip()
@@ -3642,65 +3774,79 @@ async def generate_scene_video(
         raise HTTPException(status_code=400, detail="No image available to animate.")
     negative_text = (negative_prompt or "").strip()
 
-    reference_image = None
-    if image_data_url:
-        parsed = _parse_data_url(image_data_url)
-        if parsed:
-            mime, b64_data = parsed
-            try:
-                image_bytes = base64.b64decode(b64_data, validate=True)
-            except (binascii.Error, ValueError):  # noqa: PERF203 - decoded path is tiny
-                image_bytes = None
-            if image_bytes:
-                reference_image = genai_types.Image(image_bytes=image_bytes, mime_type=mime)
-
     GENERATED_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"scene_{int(time.time())}_{secrets.token_hex(4)}.mp4"
     output_path = GENERATED_MEDIA_DIR / filename
+    result_model = normalized_model
 
-    def _run_generation() -> None:
-        """Invoke google.genai synchronously; runs in a worker thread."""
+    if _is_framepack_model(normalized_model):
+        await _generate_framepack_video(
+            prompt_text,
+            output_path=output_path,
+            image_data_url=image_data_url,
+            negative_prompt=negative_text,
+        )
+        result_model = FRAMEPACK_MODEL_ID
+    else:
+        if genai is None:
+            raise HTTPException(status_code=500, detail="google-genai package is not installed on the server.")
+        if genai_types is None:
+            raise HTTPException(status_code=500, detail="google-genai package is missing type definitions.")
 
-        client = genai.Client(api_key=api_key)
-        # Based on the reference snippet provided by the user
-        request_payload: Dict[str, Any] = {
-            "model": normalized_model,
-            "prompt": prompt_text,
-        }
-        config: Dict[str, Any] = {}
-        if negative_text:
-            # SDK expects negative prompt inside the config envelope
-            config["negative_prompt"] = negative_text
-        if config:
-            request_payload["config"] = config
-        if reference_image is not None:
-            request_payload["image"] = reference_image
-        operation = client.models.generate_videos(**request_payload)
+        api_key = require_gemini_api_key()
 
-        while not getattr(operation, "done", False):
-            time.sleep(10)
-            operation = client.operations.get(operation)
+        reference_image = None
+        if image_data_url:
+            parsed = _parse_data_url(image_data_url)
+            if parsed:
+                mime, b64_data = parsed
+                try:
+                    image_bytes = base64.b64decode(b64_data, validate=True)
+                except (binascii.Error, ValueError):  # noqa: PERF203 - decoded path is tiny
+                    image_bytes = None
+                if image_bytes:
+                    reference_image = genai_types.Image(image_bytes=image_bytes, mime_type=mime)
 
-        if getattr(operation, "error", None):
-            message = getattr(operation.error, "message", None) or "Video generation failed."
-            raise RuntimeError(message)
+        def _run_generation() -> None:
+            """Invoke google.genai synchronously; runs in a worker thread."""
 
-        response = getattr(operation, "response", None)
-        generated_videos = getattr(response, "generated_videos", None) if response else None
-        if not generated_videos:
-            raise RuntimeError("No video returned by the model.")
+            client = genai.Client(api_key=api_key)
+            request_payload: Dict[str, Any] = {
+                "model": normalized_model,
+                "prompt": prompt_text,
+            }
+            config: Dict[str, Any] = {}
+            if negative_text:
+                config["negative_prompt"] = negative_text
+            if config:
+                request_payload["config"] = config
+            if reference_image is not None:
+                request_payload["image"] = reference_image
+            operation = client.models.generate_videos(**request_payload)
 
-        generated_video = generated_videos[0]
-        client.files.download(file=generated_video.video)
-        generated_video.video.save(str(output_path))
-        # file already stored at output_path; no second copy needed
+            while not getattr(operation, "done", False):
+                time.sleep(10)
+                operation = client.operations.get(operation)
 
-    try:
-        await asyncio.to_thread(_run_generation)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Video generation failed: {exc}") from exc
+            if getattr(operation, "error", None):
+                message = getattr(operation.error, "message", None) or "Video generation failed."
+                raise RuntimeError(message)
+
+            response = getattr(operation, "response", None)
+            generated_videos = getattr(response, "generated_videos", None) if response else None
+            if not generated_videos:
+                raise RuntimeError("No video returned by the model.")
+
+            generated_video = generated_videos[0]
+            client.files.download(file=generated_video.video)
+            generated_video.video.save(str(output_path))
+
+        try:
+            await asyncio.to_thread(_run_generation)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"Video generation failed: {exc}") from exc
 
     static_root = APP_DIR / "static"
     try:
@@ -3716,13 +3862,13 @@ async def generate_scene_video(
         url_path = f"/static/{relative_path.as_posix()}"
 
     duration_seconds = _probe_mp4_duration_seconds(output_path)
-    record_video_usage(normalized_model, seconds=duration_seconds, turn_index=turn_index)
+    record_video_usage(result_model, seconds=duration_seconds, turn_index=turn_index)
 
     return SceneVideo(
         url=url_path,
         prompt=prompt_text,
         negative_prompt=negative_text or None,
-        model=normalized_model,
+        model=result_model,
         updated_at=time.time(),
         file_path=str(output_path),
     )

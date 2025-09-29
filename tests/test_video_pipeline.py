@@ -486,6 +486,72 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(video.url.startswith("/generated_media/scene_1000_abcd"))
 
+    async def test_framepack_requires_reference_image(self) -> None:
+        with self.assertRaises(rpg.HTTPException) as excinfo:
+            await rpg.generate_scene_video("Prompt", model=rpg.FRAMEPACK_MODEL_ID)
+        self.assertEqual(excinfo.exception.status_code, 400)
+
+    async def test_framepack_generation_writes_file(self) -> None:
+        async def fake_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+        ) -> None:
+            output_path.write_bytes(b"mp4data")
+
+        file_existed = False
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_framepack),
+                mock.patch("rpg.record_video_usage") as usage_mock,
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=3.5),
+                mock.patch("rpg.time.time", side_effect=[1000.0, 1001.0]),
+            ):
+                result = await rpg.generate_scene_video(
+                    "Animate",
+                    model=rpg.FRAMEPACK_MODEL_ID,
+                    image_data_url="data:image/png;base64,QUJD",
+                )
+                saved_path = Path(result.file_path)
+                file_existed = saved_path.exists()
+
+        self.assertIsInstance(result, rpg.SceneVideo)
+        self.assertEqual(result.model, rpg.FRAMEPACK_MODEL_ID)
+        self.assertTrue(file_existed)
+        usage_mock.assert_called_once_with(rpg.FRAMEPACK_MODEL_ID, seconds=3.5, turn_index=None)
+
+    async def test_framepack_path_skips_genai_dependency(self) -> None:
+        async def fake_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+        ) -> None:
+            output_path.write_bytes(b"mp4data")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_framepack),
+                mock.patch.object(rpg, "genai", None),
+                mock.patch.object(rpg, "genai_types", None),
+                mock.patch("rpg.record_video_usage"),
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=2.0),
+            ):
+                result = await rpg.generate_scene_video(
+                    "Animate",
+                    model=rpg.FRAMEPACK_MODEL_ID,
+                    image_data_url="data:image/png;base64,QUJD",
+                )
+
+        self.assertEqual(result.model, rpg.FRAMEPACK_MODEL_ID)
+
 
 class AnimateSceneTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
