@@ -190,6 +190,10 @@
   .form-card .tip { margin-top:2px; }
   .settings-body .grid2 { gap:16px; }
   .settings-footer { padding:16px 28px 24px; border-top:1px solid #1f2534; background: rgba(15,17,23,0.92); display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  .video-length-control { display:flex; flex-direction:column; gap:8px; }
+  .video-length-input { display:flex; align-items:center; gap:8px; }
+  .video-length-input input[type="number"] { width:90px; }
+  .video-length-suffix { color: var(--muted); font-size:13px; }
   .share-chip { display:flex; flex-direction:column; gap:6px; background: rgba(122,162,247,0.12); border:1px solid rgba(122,162,247,0.35); border-radius:12px; padding:12px 16px; min-width:240px; }
   .share-chip span { font-size:12px; letter-spacing:0.06em; text-transform:uppercase; color: var(--muted); }
   .share-chip code { font-family: "JetBrains Mono", Consolas, "SFMono-Regular", monospace; font-size:13px; color: var(--accent2); background: rgba(10,12,19,0.6); border-radius:8px; padding:4px 8px; word-break: break-word; }
@@ -375,6 +379,13 @@ F11</span>
           <label>
             <span data-i18n="settings.videoModel.label">Video model</span>
             <select id="setVideoModel"></select>
+          </label>
+          <label>
+            <span data-i18n="settings.videoLength.label">Video length</span>
+            <div class="video-length-input">
+              <input id="setVideoLength" type="number" min="1" max="120" step="1" />
+              <span class="video-length-suffix" data-i18n="settings.videoLength.suffix">seconds</span>
+            </div>
           </label>
           <label>
             <span data-i18n="settings.narrationModel.label">Narration model</span>
@@ -1112,6 +1123,10 @@ F11</span>
     }
   }
 
+  const DEFAULT_VIDEO_LENGTH_SECONDS = 8;
+  const VIDEO_LENGTH_MIN_SECONDS = 1;
+  const VIDEO_LENGTH_MAX_SECONDS = 120;
+
   const state = {
     playerId: null,
     playerToken: null,
@@ -1133,6 +1148,7 @@ F11</span>
     sceneVideoToken: null,
     sceneVideoUserPaused: false,
     fxSaverEnabled: initialFxSaver,
+    videoLengthSeconds: DEFAULT_VIDEO_LENGTH_SECONDS,
     youHighlights: {
       turn: 0,
       abilities: new Map(),
@@ -1398,6 +1414,56 @@ F11</span>
     return { name, children, applies_to: appliesTo };
   }
   const WORLD_STYLE_LOOKUP = new Map();
+
+  function clampVideoLength(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return DEFAULT_VIDEO_LENGTH_SECONDS;
+    }
+    if (numeric < VIDEO_LENGTH_MIN_SECONDS) return VIDEO_LENGTH_MIN_SECONDS;
+    if (numeric > VIDEO_LENGTH_MAX_SECONDS) return VIDEO_LENGTH_MAX_SECONDS;
+    return Math.round(numeric);
+  }
+
+  function setVideoLengthValue(value, options = {}) {
+    const input = $('setVideoLength');
+    const clamped = clampVideoLength(value);
+    const stringValue = String(clamped);
+    if (input && input.value !== stringValue) {
+      input.value = stringValue;
+    }
+    if (!options.silent) {
+      state.videoLengthSeconds = clamped;
+    }
+    return clamped;
+  }
+
+  function updateVideoLengthDisabledState(modelValue) {
+    const input = $('setVideoLength');
+    const isVeo = typeof modelValue === 'string' && modelValue.trim().toLowerCase().startsWith('veo');
+    if (input) {
+      input.disabled = isVeo;
+      if (isVeo) {
+        input.setAttribute('title', t('settings.videoLength.disabledTitle'));
+      } else {
+        input.removeAttribute('title');
+        input.setAttribute('title', t('settings.videoLength.tooltip'));
+      }
+    }
+  }
+
+  function bindVideoLengthControls() {
+    const input = $('setVideoLength');
+    if (input) {
+      input.addEventListener('input', () => {
+        setVideoLengthValue(input.value);
+      });
+      input.addEventListener('blur', () => {
+        setVideoLengthValue(input.value);
+      });
+    }
+    setVideoLengthValue(state.videoLengthSeconds ?? DEFAULT_VIDEO_LENGTH_SECONDS, { silent: true });
+  }
   const WORLD_STYLE_PARENT_MAP = new Map();
   let WORLD_STYLE_ENTRIES = [];
   const WORLD_STYLE_FALLBACK_TREE = [
@@ -1712,6 +1778,10 @@ F11</span>
     "settings.imageModel.label": { en: "Image model", de: "Bildmodell" },
     "settings.videoModel.label": { en: "Video model", de: "Videomodell" },
     "settings.videoModel.savedSuffix": { en: "(saved)", de: "(gespeichert)" },
+    "settings.videoLength.label": { en: "Video length", de: "Videolänge" },
+    "settings.videoLength.suffix": { en: "seconds", de: "Sekunden" },
+    "settings.videoLength.disabledTitle": { en: "Veo models generate fixed 8 second clips.", de: "Veo-Modelle erzeugen fest 8-sekündige Clips." },
+    "settings.videoLength.tooltip": { en: "FramePack tip: a 1 second clip takes about 70 seconds to render.", de: "FramePack-Tipp: Ein 1-Sekunden-Clip benötigt etwa 70 Sekunden Renderzeit." },
     "settings.narrationModel.disabledTitle": { en: "Save a valid ElevenLabs API key to load narration models.", de: "Speichere einen gültigen ElevenLabs-API-Schlüssel, um Erzählmodelle zu laden." },
     "settings.narrationModel.enterKey": { en: "Enter ElevenLabs API key to load models", de: "Gib einen ElevenLabs-API-Schlüssel ein, um Modelle zu laden" },
     "settings.narrationModel.label": { en: "Narration model", de: "Erzählmodell" },
@@ -3794,6 +3864,12 @@ F11</span>
       const imgSel = $("setImageModel");
       const videoSel = $("setVideoModel");
       const narrationSel = $("setNarrationModel");
+      const videoLengthInput = $("setVideoLength");
+      const storedVideoLength = clampVideoLength(
+        s.video_duration_seconds ?? state.videoLengthSeconds ?? DEFAULT_VIDEO_LENGTH_SECONDS
+      );
+      setVideoLengthValue(storedVideoLength, { silent: true });
+      state.videoLengthSeconds = storedVideoLength;
       try {
         const resp = await fetch("/api/models");
         if (!resp.ok) throw new Error("model list request failed");
@@ -3946,6 +4022,13 @@ F11</span>
           } else if (videoSel.options.length) {
             videoSel.value = DEFAULT_VIDEO_MODEL;
           }
+          const handleVideoModelChange = () => {
+            updateVideoLengthDisabledState(videoSel.value);
+          };
+          updateVideoLengthDisabledState(videoSel.value);
+          if (videoSel) {
+            videoSel.onchange = handleVideoModelChange;
+          }
         }
 
         if (narrationSel) {
@@ -4043,6 +4126,7 @@ F11</span>
     $("settingsBack").style.display = "none";
     syncJoinViewModalVisibility();
   };
+  bindVideoLengthControls();
   initializeWorldStylePicker();
   const worldStyleSelect = $('setWorld');
   if (worldStyleSelect) {
@@ -4080,6 +4164,10 @@ F11</span>
       image_model: $("setImageModel").value,
       video_model: $("setVideoModel").value,
     };
+    const videoLengthInput = $("setVideoLength");
+    if (videoLengthInput) {
+      body.video_duration_seconds = clampVideoLength(videoLengthInput.value);
+    }
     const historyToggle = $("setHistorySummary");
     if (historyToggle) {
       body.history_mode = historyToggle.checked ? 'summary' : 'full';

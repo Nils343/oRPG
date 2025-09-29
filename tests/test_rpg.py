@@ -70,6 +70,7 @@ def reset_state():
     rpg.game_state.last_scene_image_usd_per_image = None
     rpg.game_state.last_scene_image_model = None
     rpg.game_state.last_scene_image_turn_index = None
+    rpg.game_state.last_manual_scene_image_turn_index = None
     rpg.game_state.current_turn_image_counts = {}
     rpg.game_state.current_turn_index_for_image_counts = None
     rpg.game_state.image_counts_by_turn = {}
@@ -1402,6 +1403,8 @@ class CreateImageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"ok": True})
         self.assertEqual(rpg.game_state.last_image_data_url, fake_data_url)
+        self.assertEqual(gen.await_args.kwargs.get("turn_index"), 0)
+        self.assertEqual(rpg.game_state.last_manual_scene_image_turn_index, 0)
         self.assertFalse(rpg.game_state.lock.active)
         gen.assert_awaited_once()
         self.assertEqual(gen.await_args.kwargs.get("purpose"), "scene")
@@ -1876,6 +1879,27 @@ class SettingsEndpointTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"ok": True})
         self.assertEqual(rpg.game_state.settings["narration_model"], "eleven_flash_v2_1")
+        save_mock.assert_awaited_once_with(rpg.game_state.settings)
+
+    async def test_update_settings_sets_video_duration(self):
+        body = rpg.SettingsUpdate(video_duration_seconds=45)
+        with mock.patch("rpg.save_settings", new=mock.AsyncMock()) as save_mock:
+            result = await rpg.update_settings(body)
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(rpg.game_state.settings["video_duration_seconds"], 45)
+        save_mock.assert_awaited_once_with(rpg.game_state.settings)
+
+    async def test_update_settings_clamps_video_duration(self):
+        body = rpg.SettingsUpdate(video_duration_seconds=999)
+        with mock.patch("rpg.save_settings", new=mock.AsyncMock()) as save_mock:
+            result = await rpg.update_settings(body)
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(
+            rpg.game_state.settings["video_duration_seconds"],
+            rpg.FRAMEPACK_MAX_DURATION_SECONDS,
+        )
         save_mock.assert_awaited_once_with(rpg.game_state.settings)
 
     async def test_update_settings_sets_openai_key(self):

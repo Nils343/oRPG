@@ -492,18 +492,23 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(excinfo.exception.status_code, 400)
 
     async def test_framepack_generation_writes_file(self) -> None:
+        captured_duration: list[float] = []
+
         async def fake_framepack(
             prompt_text: str,
             *,
             output_path: Path,
             image_data_url: Optional[str],
             negative_prompt: Optional[str],
+            requested_duration: float,
         ) -> None:
             output_path.write_bytes(b"mp4data")
+            captured_duration.append(requested_duration)
 
         file_existed = False
         with tempfile.TemporaryDirectory() as tmp_dir:
             media_dir = Path(tmp_dir)
+            rpg.game_state.settings["video_duration_seconds"] = 42
             with (
                 mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
                 mock.patch("rpg._generate_framepack_video", new=fake_framepack),
@@ -523,6 +528,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.model, rpg.FRAMEPACK_MODEL_ID)
         self.assertTrue(file_existed)
         usage_mock.assert_called_once_with(rpg.FRAMEPACK_MODEL_ID, seconds=3.5, turn_index=None)
+        self.assertEqual(captured_duration, [42])
 
     async def test_framepack_path_skips_genai_dependency(self) -> None:
         async def fake_framepack(
@@ -531,6 +537,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             output_path: Path,
             image_data_url: Optional[str],
             negative_prompt: Optional[str],
+            requested_duration: float,
         ) -> None:
             output_path.write_bytes(b"mp4data")
 
@@ -551,6 +558,37 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(result.model, rpg.FRAMEPACK_MODEL_ID)
+
+    async def test_framepack_duration_clamped_to_bounds(self) -> None:
+        captured_duration: list[float] = []
+
+        async def fake_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+            requested_duration: float,
+        ) -> None:
+            output_path.write_bytes(b"mp4data")
+            captured_duration.append(requested_duration)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            rpg.game_state.settings["video_duration_seconds"] = 999
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_framepack),
+                mock.patch("rpg.record_video_usage"),
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=5.0),
+            ):
+                await rpg.generate_scene_video(
+                    "Animate",
+                    model=rpg.FRAMEPACK_MODEL_ID,
+                    image_data_url="data:image/png;base64,QUJD",
+                )
+
+        self.assertEqual(captured_duration, [rpg.FRAMEPACK_MAX_DURATION_SECONDS])
 
 
 class AnimateSceneTests(unittest.IsolatedAsyncioTestCase):
@@ -590,6 +628,59 @@ class AnimateSceneTests(unittest.IsolatedAsyncioTestCase):
             await rpg.animate_scene(rpg.AnimateSceneBody(player_id="p1", token="tok"))
         self.assertEqual(rpg.game_state.scene_video, video)
         self.assertEqual(rpg.game_state.last_scene_video_turn_index, 0)
+
+    async def test_passes_manual_image_only_for_matching_turn(self) -> None:
+        rpg.game_state.turn_index = 1
+        rpg.game_state.history = [
+            rpg.TurnRecord(index=0, narrative="Story", image_prompt="Prompt", timestamp=0.0)
+        ]
+        rpg.game_state.last_image_turn_index = 0
+        rpg.game_state.last_manual_scene_image_turn_index = 0
+        video = rpg.SceneVideo(
+            url="/generated_media/scene.mp4",
+            prompt="Prompt",
+            negative_prompt=None,
+            model="veo",
+            updated_at=1.0,
+            file_path="/tmp/scene.mp4",
+        )
+        with (
+            mock.patch("rpg.authenticate_player", side_effect=lambda pid, token: rpg.game_state.players[pid]),
+            mock.patch("rpg.generate_scene_video", return_value=video, new_callable=mock.AsyncMock) as gen,
+            mock.patch("rpg._clear_scene_video"),
+            mock.patch("rpg.announce", new=mock.AsyncMock()),
+            mock.patch("rpg.broadcast_public", new=mock.AsyncMock()),
+        ):
+            await rpg.animate_scene(rpg.AnimateSceneBody(player_id="p1", token="tok"))
+
+        self.assertEqual(gen.await_args.kwargs.get("image_data_url"), rpg.game_state.last_image_data_url)
+
+    async def test_skips_image_when_manual_turn_mismatch(self) -> None:
+        rpg.game_state.turn_index = 2
+        rpg.game_state.history = [
+            rpg.TurnRecord(index=0, narrative="Story0", image_prompt="Prompt0", timestamp=0.0),
+            rpg.TurnRecord(index=1, narrative="Story1", image_prompt="Prompt1", timestamp=1.0),
+        ]
+        rpg.game_state.last_image_turn_index = 0
+        rpg.game_state.last_manual_scene_image_turn_index = 0
+        video = rpg.SceneVideo(
+            url="/generated_media/scene.mp4",
+            prompt="Prompt",
+            negative_prompt=None,
+            model="veo",
+            updated_at=1.0,
+            file_path="/tmp/scene.mp4",
+        )
+        with (
+            mock.patch("rpg.authenticate_player", side_effect=lambda pid, token: rpg.game_state.players[pid]),
+            mock.patch("rpg.generate_scene_video", return_value=video, new_callable=mock.AsyncMock) as gen,
+            mock.patch("rpg._clear_scene_video"),
+            mock.patch("rpg.announce", new=mock.AsyncMock()),
+            mock.patch("rpg.broadcast_public", new=mock.AsyncMock()),
+        ):
+            await rpg.animate_scene(rpg.AnimateSceneBody(player_id="p1", token="tok"))
+
+        self.assertIsNone(gen.await_args.kwargs.get("image_data_url"))
 
 
 class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):

@@ -16,6 +16,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
 import os
 import re
 import secrets
@@ -37,6 +38,7 @@ from typing import (
     Iterable,
     List,
     Literal,
+    Mapping,
     Optional,
     Set,
     Tuple,
@@ -121,6 +123,8 @@ DEFAULT_VIDEO_MODEL = "veo-3.0-generate-001"
 FRAMEPACK_MODEL_ID = "FramePack"
 FRAMEPACK_DEFAULT_DURATION_SECONDS = 8.0
 FRAMEPACK_DEFAULT_VARIANT = "Original"
+FRAMEPACK_MIN_DURATION_SECONDS = 1
+FRAMEPACK_MAX_DURATION_SECONDS = 120
 
 HISTORY_MODE_FULL = "full"
 HISTORY_MODE_SUMMARY = "summary"
@@ -260,6 +264,33 @@ def _resolve_framepack_image(image_data_url: Optional[str]) -> Tuple[bytes, str]
     return image_bytes, suffix
 
 
+def _normalize_video_duration_seconds(raw: Any) -> int:
+    if raw is None:
+        return int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
+    if isinstance(raw, bool):  # guard against bool being subclass of int
+        raise ValueError("Invalid duration value")
+    if isinstance(raw, (int, float)):
+        numeric = float(raw)
+    elif isinstance(raw, str):
+        candidate = raw.strip()
+        if not candidate:
+            return int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
+        try:
+            numeric = float(candidate)
+        except ValueError as exc:
+            raise ValueError("Invalid duration value") from exc
+    else:
+        raise ValueError("Invalid duration value")
+    if not math.isfinite(numeric):
+        raise ValueError("Invalid duration value")
+    rounded = int(round(numeric))
+    if rounded < FRAMEPACK_MIN_DURATION_SECONDS:
+        return FRAMEPACK_MIN_DURATION_SECONDS
+    if rounded > FRAMEPACK_MAX_DURATION_SECONDS:
+        return FRAMEPACK_MAX_DURATION_SECONDS
+    return rounded
+
+
 def _decode_base64_data(b64_data: str) -> Optional[bytes]:
     if not b64_data:
         return None
@@ -312,7 +343,7 @@ _LANGUAGE_CODE_ALIASES = {
 }
 
 
-def normalize_language(lang: Optional[str]) -> str:
+def normalize_language(lang: Any) -> str:
     normalized = _normalize_language_code(lang)
     if normalized:
         return normalized
@@ -351,6 +382,22 @@ def _normalize_language_code(value: Any) -> Optional[str]:
             normalized = candidate
             break
     return normalized
+
+
+def _get_setting_str(
+    settings: Mapping[str, Any],
+    key: str,
+    *,
+    default: Optional[str] = None,
+) -> Optional[str]:
+    """Return a sanitized string from settings or *default* when absent."""
+
+    value = settings.get(key)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned or cleaned == "":
+            return cleaned
+    return default
 
 
 def normalize_history_mode(value: Any) -> str:
@@ -546,7 +593,7 @@ async def fetch_public_ip() -> Optional[str]:
 
 
 # -------- Defaults --------
-DEFAULT_SETTINGS = {
+DEFAULT_SETTINGS: Dict[str, str | int] = {
     "gemini_api_key": "",
     "grok_api_key": "",
     "openai_api_key": "",
@@ -554,6 +601,7 @@ DEFAULT_SETTINGS = {
     "text_model": "grok-4-fast-non-reasoning",
     "image_model": "gemini-2.5-flash-image-preview",
     "video_model": DEFAULT_VIDEO_MODEL,
+    "video_duration_seconds": int(FRAMEPACK_DEFAULT_DURATION_SECONDS),
     "narration_model": ELEVENLABS_MODEL_ID,
     "world_style": "High fantasy",
     "difficulty": "Normal",  # Trivial, Easy, Normal, Hard, Impossible
@@ -1381,7 +1429,7 @@ class LockState:
 
 @dataclass
 class GameState:
-    settings: Dict = field(default_factory=lambda: DEFAULT_SETTINGS.copy())
+    settings: Dict[str, Any] = field(default_factory=lambda: DEFAULT_SETTINGS.copy())
     players: Dict[str, Player] = field(default_factory=dict)  # player_id -> Player
     departed_players: Dict[str, str] = field(default_factory=dict)  # normalized_name -> display name
     submissions: Dict[str, str] = field(default_factory=dict)  # player_id -> text
@@ -1432,6 +1480,7 @@ class GameState:
     last_scene_image_usd_per_image: Optional[float] = None
     last_scene_image_model: Optional[str] = None
     last_scene_image_turn_index: Optional[int] = None
+    last_manual_scene_image_turn_index: Optional[int] = None
     session_image_kind_counts: Dict[str, int] = field(default_factory=dict)
     current_turn_image_counts: Dict[str, int] = field(default_factory=dict)
     current_turn_index_for_image_counts: Optional[int] = None
@@ -1857,6 +1906,7 @@ def reset_session_progress() -> None:
     game_state.last_scene_image_usd_per_image = None
     game_state.last_scene_image_model = None
     game_state.last_scene_image_turn_index = None
+    game_state.last_manual_scene_image_turn_index = None
     game_state.current_turn_image_counts = {}
     game_state.current_turn_index_for_image_counts = None
     game_state.image_counts_by_turn = {}
@@ -2501,6 +2551,7 @@ async def schedule_auto_scene_image(prompt: Optional[str], turn_index: int, *, f
                 )
                 _clear_scene_video()
                 game_state.last_image_data_url = data_url
+                game_state.last_manual_scene_image_turn_index = None
                 game_state.last_image_prompt = current_prompt
                 await announce("Image generated.")
                 await broadcast_public()
@@ -3670,6 +3721,7 @@ async def _generate_framepack_video(
     output_path: Path,
     image_data_url: Optional[str],
     negative_prompt: Optional[str],
+    requested_duration: float,
 ) -> None:
     image_bytes, suffix = _resolve_framepack_image(image_data_url)
     module = _load_framepack_module()
@@ -3677,7 +3729,10 @@ async def _generate_framepack_video(
 
     min_duration = float(getattr(module, "MIN_DURATION_SECONDS", FRAMEPACK_DEFAULT_DURATION_SECONDS))
     max_duration = float(getattr(module, "MAX_DURATION_SECONDS", FRAMEPACK_DEFAULT_DURATION_SECONDS))
-    duration = FRAMEPACK_DEFAULT_DURATION_SECONDS
+    try:
+        duration = float(requested_duration)
+    except (TypeError, ValueError):
+        duration = FRAMEPACK_DEFAULT_DURATION_SECONDS
     duration = max(min_duration, min(duration, max_duration))
     model_variant = getattr(module, "FRAMEPACK_DEFAULT_VARIANT", FRAMEPACK_DEFAULT_VARIANT)
     if not isinstance(model_variant, str) or not model_variant:
@@ -3780,11 +3835,18 @@ async def generate_scene_video(
     result_model = normalized_model
 
     if _is_framepack_model(normalized_model):
+        try:
+            duration_setting = _normalize_video_duration_seconds(
+                game_state.settings.get("video_duration_seconds")
+            )
+        except ValueError:
+            duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
         await _generate_framepack_video(
             prompt_text,
             output_path=output_path,
             image_data_url=image_data_url,
             negative_prompt=negative_text,
+            requested_duration=duration_setting,
         )
         result_model = FRAMEPACK_MODEL_ID
     else:
@@ -4033,7 +4095,8 @@ async def update_history_summary(latest_turn: TurnRecord) -> None:
         game_state.history_summary = _fallback_summary_from_history()
         return
 
-    model = game_state.settings.get("text_model") or DEFAULT_SETTINGS["text_model"]
+    default_text_model = cast(str, DEFAULT_SETTINGS["text_model"])
+    model = _get_setting_str(game_state.settings, "text_model", default=default_text_model) or default_text_model
     provider = detect_text_provider(model)
     try:
         require_text_api_key(provider)
@@ -4235,7 +4298,8 @@ async def resolve_turn(initial: bool = False) -> None:
         schema = build_turn_schema()
         system_text = make_gm_instruction(is_initial=initial)
         payload = build_turn_request_payload()
-        model = game_state.settings.get("text_model") or DEFAULT_SETTINGS["text_model"]
+        default_text_model = cast(str, DEFAULT_SETTINGS["text_model"])
+        model = _get_setting_str(game_state.settings, "text_model", default=default_text_model) or default_text_model
 
         result: TurnStructured = await request_turn_payload(
             model=model,
@@ -4293,6 +4357,7 @@ async def resolve_turn(initial: bool = False) -> None:
         game_state.last_image_prompt = image_prompt
         game_state.last_video_prompt = video_prompt or image_prompt
         game_state.last_video_negative_prompt = video_negative_prompt if video_prompt else None
+        game_state.last_manual_scene_image_turn_index = None
         if isinstance(current_turn_index, int):
             current_bucket = _bind_turn_image_bucket(current_turn_index)
             current_bucket.clear()
@@ -4509,6 +4574,7 @@ class SettingsUpdate(BaseModel):
     text_model: Optional[str] = None
     image_model: Optional[str] = None
     video_model: Optional[str] = None
+    video_duration_seconds: Optional[int] = None
     narration_model: Optional[str] = None
     thinking_mode: Optional[str] = None
     history_mode: Optional[str] = None
@@ -4524,6 +4590,7 @@ async def update_settings(body: SettingsUpdate) -> Dict[str, Any]:
         "text_model",
         "image_model",
         "video_model",
+        "video_duration_seconds",
         "narration_model",
         "thinking_mode",
         "history_mode",
@@ -4540,6 +4607,15 @@ async def update_settings(body: SettingsUpdate) -> Dict[str, Any]:
                 if not model_val:
                     continue
                 game_state.settings[k] = model_val
+            elif k == "video_duration_seconds":
+                try:
+                    duration_val = _normalize_video_duration_seconds(v)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="video_duration_seconds must be between 1 and 120 seconds.",
+                    ) from exc
+                game_state.settings[k] = duration_val
             elif k == "narration_model":
                 model_val = str(v).strip()
                 if not model_val:
@@ -4803,6 +4879,7 @@ class CreateImageBody(BaseModel):
 
 @app.post("/api/create_image")
 async def create_image(body: CreateImageBody) -> Dict[str, Any]:
+    target_turn_index: Optional[int] = None
     async with STATE_LOCK:
         if game_state.lock.active:
             raise HTTPException(status_code=409, detail="Another operation is in progress.")
@@ -4810,6 +4887,10 @@ async def create_image(body: CreateImageBody) -> Dict[str, Any]:
         # Need an image prompt from the latest turn
         if not game_state.last_image_prompt:
             raise HTTPException(status_code=400, detail="No image prompt available yet.")
+        if game_state.history:
+            target_turn_index = game_state.history[-1].index
+        elif isinstance(game_state.turn_index, int):
+            target_turn_index = game_state.turn_index
         game_state.lock = LockState(active=True, reason="generating_image")
         await broadcast_public()
 
@@ -4819,9 +4900,11 @@ async def create_image(body: CreateImageBody) -> Dict[str, Any]:
             img_model,
             game_state.last_image_prompt,
             purpose="scene",
+            turn_index=target_turn_index,
         )
         _clear_scene_video()
         game_state.last_image_data_url = data_url
+        game_state.last_manual_scene_image_turn_index = target_turn_index
         await announce("Image generated.")
         await broadcast_public()
         return {"ok": True}
@@ -4856,10 +4939,18 @@ async def animate_scene(body: AnimateSceneBody) -> Dict[str, Any]:
             target_turn_index = game_state.turn_index
         else:
             target_turn_index = None
+        image_for_video: Optional[str] = None
+        if (
+            target_turn_index is not None
+            and game_state.last_manual_scene_image_turn_index == target_turn_index
+            and game_state.last_image_turn_index == target_turn_index
+            and game_state.last_image_data_url
+        ):
+            image_for_video = game_state.last_image_data_url
         new_video = await generate_scene_video(
             prompt,
             game_state.settings.get("video_model"),
-            image_data_url=game_state.last_image_data_url,
+            image_data_url=image_for_video,
             negative_prompt=negative_prompt,
             turn_index=target_turn_index,
         )

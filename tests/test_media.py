@@ -193,6 +193,7 @@ class MaybeQueueSceneImageWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(broadcast_mock.await_count >= 2)
         self.assertEqual(rpg.game_state.last_image_data_url, data_url)
         self.assertEqual(rpg.game_state.last_image_prompt, "Mystical forest")
+        self.assertIsNone(rpg.game_state.last_manual_scene_image_turn_index)
         self.assertFalse(rpg.game_state.lock.active)
 
     async def test_worker_aborts_after_many_lock_retries(self) -> None:
