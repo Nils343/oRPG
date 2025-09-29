@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 try:  # allow execution both as ``scripts.coverage_utils`` and plain module
     from scripts.path_utils import resolve_repo_path
 except ModuleNotFoundError:  # pragma: no cover - fallback when running from scripts/
     from path_utils import resolve_repo_path
 
-_COVERAGE_LATEST_PATH = resolve_repo_path("coverage-latest.json")
+_COVERAGE_LATEST_PATH: Path = resolve_repo_path("coverage-latest.json")
 
 
 def coverage_latest_path() -> Path:
@@ -30,7 +30,8 @@ def load_coverage_latest() -> Dict[str, Any]:
 
     try:
         with coverage_latest_path().open(encoding="utf-8") as handle:
-            return json.load(handle)
+            data = json.load(handle)
+            return cast(Dict[str, Any], data)
     except FileNotFoundError as exc:  # pragma: no cover - exercised in tests via explicit assertion
         msg = f"coverage-latest.json not found at {coverage_latest_path()}"
         raise FileNotFoundError(msg) from exc

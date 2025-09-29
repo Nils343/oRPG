@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import io
 import json
-import importlib
 import struct
 import types
 from contextlib import asynccontextmanager
@@ -102,7 +102,12 @@ def test_schedule_auto_scene_image_http_error_logs(monkeypatch: pytest.MonkeyPat
         ):
             m.setattr(rpg.asyncio, "create_task", capture_task)
             m.setattr(rpg.asyncio, "sleep", mock.AsyncMock())
-            m.setattr(rpg, "gemini_generate_image", mock.AsyncMock(side_effect=HTTPException(status_code=429, detail="rate limited")))
+            rate_limited_error = HTTPException(status_code=429, detail="rate limited")
+            m.setattr(
+                rpg,
+                "gemini_generate_image",
+                mock.AsyncMock(side_effect=rate_limited_error),
+            )
             broadcast_mock = mock.AsyncMock()
             m.setattr(rpg, "broadcast_public", broadcast_mock)
             m.setattr(rpg, "announce", mock.AsyncMock())
@@ -395,7 +400,12 @@ def test_schedule_auto_scene_video_http_error_logs(monkeypatch: pytest.MonkeyPat
         ):
             m.setattr(rpg.asyncio, "create_task", capture_task)
             m.setattr(rpg.asyncio, "sleep", mock.AsyncMock())
-            m.setattr(rpg, "generate_scene_video", mock.AsyncMock(side_effect=HTTPException(status_code=429, detail="limit")))
+            rate_limited_video_error = HTTPException(status_code=429, detail="limit")
+            m.setattr(
+                rpg,
+                "generate_scene_video",
+                mock.AsyncMock(side_effect=rate_limited_video_error),
+            )
             m.setattr(rpg, "broadcast_public", mock.AsyncMock())
             m.setattr(rpg, "announce", mock.AsyncMock())
             m.setattr(rpg, "_clear_scene_video", mock.Mock())
@@ -1419,7 +1429,12 @@ def test_update_history_summary_falls_back_when_key_missing(monkeypatch: pytest.
         rpg.game_state.history_summary = []
         rpg.game_state.settings["history_mode"] = rpg.HISTORY_MODE_SUMMARY
 
-        monkeypatch.setattr(rpg, "require_text_api_key", mock.Mock(side_effect=HTTPException(status_code=401, detail="missing")))
+        missing_key_error = HTTPException(status_code=401, detail="missing")
+        monkeypatch.setattr(
+            rpg,
+            "require_text_api_key",
+            mock.Mock(side_effect=missing_key_error),
+        )
 
         latest = rpg.game_state.history[-1]
         await rpg.update_history_summary(latest)

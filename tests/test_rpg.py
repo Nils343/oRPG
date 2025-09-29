@@ -3988,7 +3988,7 @@ class SessionResetJoinTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(old_pid, rpg.game_state.players)
 
 
-class HistorySummaryTests(unittest.IsolatedAsyncioTestCase):
+class HistorySummaryAdvancedTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         reset_state()
         rpg.game_state.history = [

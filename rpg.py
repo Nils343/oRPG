@@ -32,8 +32,8 @@ from typing import (
     Dict,
     Final,
     Iterable,
-    Literal,
     List,
+    Literal,
     Optional,
     Set,
     Tuple,
@@ -2337,7 +2337,8 @@ async def schedule_auto_tts(text: str, turn_index: int) -> None:
 
         game_state.last_tts_model = resolved_model_id
         game_state.last_tts_voice_id = ELEVENLABS_VOICE_ID
-        game_state.last_tts_request_id = metadata.get("request_id") if isinstance(metadata.get("request_id"), str) else None
+        request_id_meta = metadata.get("request_id")
+        game_state.last_tts_request_id = request_id_meta if isinstance(request_id_meta, str) else None
         game_state.last_tts_characters = int(characters_final) if isinstance(characters_final, int) else None
         game_state.last_tts_character_source = metadata.get("character_source")
         game_state.last_tts_credits = float(credits_estimated) if isinstance(credits_estimated, (int, float)) else None

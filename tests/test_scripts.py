@@ -6,8 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-import pytest
-
 from scripts import analyze_slow_tests, run_tests_with_timeout
 
 

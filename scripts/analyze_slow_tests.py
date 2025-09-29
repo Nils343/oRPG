@@ -184,13 +184,15 @@ def _estimate_loop_iterations(iter_node: ast.AST) -> int:
             except Exception:
                 return LOOP_ITERATION_THRESHOLD
             if len(args) == 1 and isinstance(args[0], int):
-                return args[0]
+                return int(args[0])
             if len(args) >= 2 and all(isinstance(val, int) for val in args[:2]):
-                start, stop = args[0], args[1]
-                step = args[2] if len(args) >= 3 and isinstance(args[2], int) else 1
+                start = int(args[0])
+                stop = int(args[1])
+                step = int(args[2]) if len(args) >= 3 and isinstance(args[2], int) else 1
                 if step == 0:
                     return LOOP_ITERATION_THRESHOLD
-                return abs((stop - start) // step)
+                range_size = (stop - start) // step
+                return abs(range_size)
         return LOOP_ITERATION_THRESHOLD
     return 0
 

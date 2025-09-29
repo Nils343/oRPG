@@ -5,8 +5,8 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from typing import Any, Optional
 from unittest import mock
-from typing import Optional
 
 from fastapi.testclient import TestClient
 
@@ -376,7 +376,10 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
                 self.api_key = api_key
                 self.models = types.SimpleNamespace(generate_videos=lambda **kwargs: DummyOperation())
                 self.operations = types.SimpleNamespace(get=lambda op: op)
-                self.files = types.SimpleNamespace(download=lambda file: (_ for _ in ()).throw(ValueError("download failed")))
+                def _download_raise(*_args: Any, **_kwargs: Any) -> None:
+                    raise ValueError("download failed")
+
+                self.files = types.SimpleNamespace(download=_download_raise)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             scene_dir = Path(tmp_dir) / "scenes"
@@ -399,8 +402,13 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self) -> None:
                 self.done = True
                 self.error = None
+                class _Video:
+                    @staticmethod
+                    def save(path: str) -> None:
+                        Path(path).write_bytes(b"vid")
+
                 self.response = types.SimpleNamespace(
-                    generated_videos=[types.SimpleNamespace(video=types.SimpleNamespace(save=lambda path: Path(path).write_bytes(b"vid")))]
+                    generated_videos=[types.SimpleNamespace(video=_Video())]
                 )
 
         class DummyClient:
@@ -437,8 +445,13 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self) -> None:
                 self.done = True
                 self.error = None
+                class _Video:
+                    @staticmethod
+                    def save(path: str) -> None:
+                        Path(path).write_bytes(b"vid")
+
                 self.response = types.SimpleNamespace(
-                    generated_videos=[types.SimpleNamespace(video=types.SimpleNamespace(save=lambda path: Path(path).write_bytes(b"vid")))]
+                    generated_videos=[types.SimpleNamespace(video=_Video())]
                 )
 
         class DummyClient:

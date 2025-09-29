@@ -81,7 +81,9 @@ def main() -> None:
         print(f"[{idx}/{len(nodes)}] {nodeid}", flush=True)
         result = run_node(nodeid, args.timeout)
         results.append(result)
-        if result["status"] == "timeout" or (isinstance(result["duration_s"], (int, float)) and result["duration_s"] > args.timeout):
+        duration = result.get("duration_s")
+        timed_out = result["status"] == "timeout"
+        if timed_out or (isinstance(duration, (int, float)) and duration > args.timeout):
             slow.append(result)
 
     print("\nSummary:")

@@ -4,9 +4,9 @@ from typing import Any, Dict
 from unittest import mock
 
 import httpx
-import rpg
 from fastapi import HTTPException
 
+import rpg
 from tests.test_rpg import reset_state
 
 
