@@ -1,4 +1,4 @@
-FramePack Studio API notes for turning a still image into an animated clip via gradio_client.
+FramePack Studio API notes for creating animated clips via gradio_client (with or without a source image).
 
 Prerequisites
 1. Launch FramePack Studio locally (Pinokio shows the port, e.g. http://127.0.0.1:7860) and keep it running.
@@ -13,7 +13,7 @@ Connecting
 Submitting a job
 - /handle_start_button expects 28 positional arguments. The defaults discovered 2025-09-28 are:
   selected_model="Original"
-  param_1 = start frame image (use handle_file("path/to.png"))
+  param_1 = start frame image (use handle_file("path/to.png") or None for prompt-only runs)
   param_2 = video input (None for image-only)
   param_3 = end frame image (None unless you want to blend toward an end frame)
   param_4..param_28 = numeric or boolean settings (video length, steps, CFG, caching, resolution, etc.)
@@ -22,7 +22,7 @@ Submitting a job
 
 result = client.predict(
     "Original",                 # Generation Type
-    handle_file("test.png"),    # Start Frame
+    handle_file("test.png"),    # Start Frame (None -> generate from noise)
     None,                        # Video Input
     None,                        # End Frame
     1.0,                         # End Frame Influence
@@ -74,11 +74,11 @@ from gradio_client import Client, handle_file
 client = Client("http://127.0.0.1:7860", download_files="downloads")
 result = client.predict(
     "Original",
-    handle_file("test.png"),
+    None,  # omit image to start from latent noise
     None,
     None,
     1.0,
-    "Gentle animation of the provided scene with subtle motion and depth cues",
+    "Gentle animation with subtle motion and depth cues",
     "",
     2500,
     False,
