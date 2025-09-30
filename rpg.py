@@ -1347,7 +1347,7 @@ class TurnStructured(BaseModel):
         default=None,
         validation_alias=AliasChoices("vid", "video"),
         serialization_alias="vid",
-    )  # Veo video prompt bundle (legacy string allowed)
+    )  # Video prompt bundle (legacy string allowed)
     public_statuses: List[PublicStatus] = Field(
         default_factory=list,
         validation_alias=AliasChoices("pub", "public_statuses"),
