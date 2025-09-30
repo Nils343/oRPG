@@ -23,6 +23,7 @@ import secrets
 import sys
 import tempfile
 import time
+import subprocess
 import unicodedata
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -121,6 +122,10 @@ DEFAULT_TEXT_TEMPERATURE = 0.2
 
 DEFAULT_VIDEO_MODEL = "veo-3.0-generate-001"
 FRAMEPACK_MODEL_ID = "FramePack"
+FRAMEPACK_STATIC_MODEL_ID = "Static FramePack"
+FRAMEPACK_STATIC_END_INFLUENCE = 0.8
+PARALLAX_MODEL_ID = "Parallax"
+PARALLAX_DEFAULT_LAYERS = 4
 FRAMEPACK_DEFAULT_DURATION_SECONDS = 8.0
 FRAMEPACK_DEFAULT_VARIANT = "Original"
 FRAMEPACK_MIN_DURATION_SECONDS = 1
@@ -245,6 +250,18 @@ def _is_framepack_model(model: Optional[str]) -> bool:
     return str(model).strip().lower() == FRAMEPACK_MODEL_ID.lower()
 
 
+def _is_framepack_static_model(model: Optional[str]) -> bool:
+    if not model:
+        return False
+    return str(model).strip().lower() == FRAMEPACK_STATIC_MODEL_ID.lower()
+
+
+def _is_parallax_model(model: Optional[str]) -> bool:
+    if not model:
+        return False
+    return str(model).strip().lower() == PARALLAX_MODEL_ID.lower()
+
+
 def _load_framepack_module():
     try:
         return importlib.import_module("Animate.animate_framepack")
@@ -268,6 +285,22 @@ def _resolve_framepack_image(image_data_url: Optional[str]) -> Optional[Tuple[by
     image_bytes = _decode_base64_data(b64_data)
     if not image_bytes:
         raise HTTPException(status_code=400, detail="FramePack reference image could not be decoded.")
+    suffix = _suffix_from_mime(mime or "image/png") or ".png"
+    if suffix == ".bin":
+        suffix = ".png"
+    return image_bytes, suffix
+
+
+def _resolve_parallax_image(image_data_url: Optional[str]) -> Tuple[bytes, str]:
+    if not image_data_url:
+        raise HTTPException(status_code=400, detail="Parallax animation requires an existing image.")
+    parsed = _parse_data_url(image_data_url)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Parallax reference image data URL is invalid.")
+    mime, b64_data = parsed
+    image_bytes = _decode_base64_data(b64_data)
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Parallax reference image could not be decoded.")
     suffix = _suffix_from_mime(mime or "image/png") or ".png"
     if suffix == ".bin":
         suffix = ".png"
@@ -2644,11 +2677,37 @@ async def schedule_auto_scene_video(
                 await broadcast_public()
 
             try:
+                image_for_video: Optional[str] = None
+                if _is_parallax_model(model_setting):
+                    source_image = game_state.last_image_data_url
+                    if not source_image:
+                        print(
+                            "Auto video generation skipped: Parallax requires an existing image.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        return
+                    image_for_video = source_image
+                elif _is_framepack_static_model(model_setting):
+                    source_image = game_state.last_image_data_url
+                    if not source_image:
+                        print(
+                            "Auto video generation skipped: Static FramePack requires an existing image.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        return
+                    image_for_video = source_image
+                video_kwargs = {
+                    "negative_prompt": current_negative,
+                    "turn_index": turn_index,
+                }
+                if image_for_video is not None:
+                    video_kwargs["image_data_url"] = image_for_video
                 new_video = await generate_scene_video(
                     current_prompt,
                     model_setting,
-                    negative_prompt=current_negative,
-                    turn_index=turn_index,
+                    **video_kwargs,
                 )
                 _clear_scene_video()
                 game_state.scene_video = new_video
@@ -3734,9 +3793,17 @@ async def _generate_framepack_video(
     image_data_url: Optional[str],
     negative_prompt: Optional[str],
     requested_duration: float,
+    prompt_override: Optional[str] = None,
+    require_image: bool = False,
+    require_image_error: Optional[str] = None,
+    use_image_as_end_frame: bool = False,
+    end_frame_influence: Optional[float] = None,
 ) -> None:
     module = _load_framepack_module()
     negative_value = (negative_prompt or "").strip()
+    framepack_prompt = prompt_override if prompt_override is not None else prompt_text
+    if framepack_prompt is None:
+        framepack_prompt = ""
 
     min_duration = float(getattr(module, "MIN_DURATION_SECONDS", FRAMEPACK_DEFAULT_DURATION_SECONDS))
     max_duration = float(getattr(module, "MAX_DURATION_SECONDS", FRAMEPACK_DEFAULT_DURATION_SECONDS))
@@ -3750,6 +3817,9 @@ async def _generate_framepack_video(
         model_variant = FRAMEPACK_DEFAULT_VARIANT
 
     resolved_image = _resolve_framepack_image(image_data_url)
+    if require_image and resolved_image is None:
+        detail = require_image_error or "FramePack animation requires an existing image."
+        raise HTTPException(status_code=400, detail=detail)
 
     def _run() -> None:
         with tempfile.TemporaryDirectory(prefix="framepack_src_") as temp_dir_name:
@@ -3759,6 +3829,9 @@ async def _generate_framepack_video(
                 image_bytes, suffix = resolved_image
                 source_path = temp_dir / f"framepack_source{suffix}"
                 source_path.write_bytes(image_bytes)
+            end_frame_path: Optional[Path] = None
+            if use_image_as_end_frame and source_path is not None:
+                end_frame_path = source_path
 
             auto_download = os.name != "nt"
             download_setting = temp_dir if auto_download else False
@@ -3773,12 +3846,19 @@ async def _generate_framepack_video(
                 if not callable(submit):
                     raise RuntimeError("FramePack helper missing submit_job function")
 
-                submit_args = [client, source_path, prompt_text, duration, model_variant]
+                submit_args = [client, source_path, framepack_prompt, duration, model_variant]
                 submit_kwargs: Dict[str, Any] = {}
                 try:
                     signature = inspect.signature(submit)
                     if "negative_prompt" in signature.parameters:
                         submit_kwargs["negative_prompt"] = negative_value
+                    if "end_frame" in signature.parameters and end_frame_path is not None:
+                        submit_kwargs["end_frame"] = end_frame_path
+                    if (
+                        "end_frame_influence" in signature.parameters
+                        and end_frame_influence is not None
+                    ):
+                        submit_kwargs["end_frame_influence"] = float(end_frame_influence)
                 except (TypeError, ValueError):
                     pass
                 job_id = submit(*submit_args, **submit_kwargs)
@@ -3841,7 +3921,7 @@ async def generate_scene_video(
     requested_model = model or game_state.settings.get("video_model") or DEFAULT_VIDEO_MODEL
     normalized_model = str(requested_model).strip() or DEFAULT_VIDEO_MODEL
     prompt_text = (prompt or "").strip()
-    if not prompt_text:
+    if not prompt_text and not _is_framepack_static_model(normalized_model):
         raise HTTPException(status_code=400, detail="No image available to animate.")
     negative_text = (negative_prompt or "").strip()
 
@@ -3851,21 +3931,107 @@ async def generate_scene_video(
     output_path = _unique_media_path(output_path)
     result_model = normalized_model
 
-    if _is_framepack_model(normalized_model):
+    if _is_framepack_model(normalized_model) or _is_framepack_static_model(normalized_model):
+        is_static_framepack = _is_framepack_static_model(normalized_model)
         try:
             duration_setting = _normalize_video_duration_seconds(
                 game_state.settings.get("video_duration_seconds")
             )
         except ValueError:
             duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
-        await _generate_framepack_video(
-            prompt_text,
-            output_path=output_path,
-            image_data_url=image_data_url,
-            negative_prompt=negative_text,
-            requested_duration=duration_setting,
-        )
-        result_model = FRAMEPACK_MODEL_ID
+        if is_static_framepack:
+            source_data_url = image_data_url or game_state.last_image_data_url
+            await _generate_framepack_video(
+                prompt_text,
+                output_path=output_path,
+                image_data_url=source_data_url,
+                negative_prompt=negative_text,
+                requested_duration=duration_setting,
+                prompt_override="",
+                require_image=True,
+                require_image_error="Static FramePack requires an existing image.",
+                use_image_as_end_frame=True,
+                end_frame_influence=FRAMEPACK_STATIC_END_INFLUENCE,
+            )
+            result_model = FRAMEPACK_STATIC_MODEL_ID
+        else:
+            await _generate_framepack_video(
+                prompt_text,
+                output_path=output_path,
+                image_data_url=image_data_url,
+                negative_prompt=negative_text,
+                requested_duration=duration_setting,
+            )
+            result_model = FRAMEPACK_MODEL_ID
+    elif _is_parallax_model(normalized_model):
+        source_data_url = image_data_url or game_state.last_image_data_url
+        image_payload = _resolve_parallax_image(source_data_url)
+        script_path = APP_DIR / "Animate" / "parallax.py"
+        if not script_path.exists():
+            raise HTTPException(status_code=500, detail="Parallax animator is unavailable on the server.")
+
+        try:
+            duration_setting = _normalize_video_duration_seconds(
+                game_state.settings.get("video_duration_seconds")
+            )
+        except ValueError:
+            duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
+        duration_seconds = float(duration_setting)
+
+        device_preference = "cuda"
+        try:  # torch is optional; fall back to CPU when unavailable
+            import torch  # type: ignore
+        except Exception:  # pragma: no cover - optional dependency detection only
+            device_preference = "cpu"
+        else:  # pragma: no branch - simple availability check
+            if not torch.cuda.is_available():
+                device_preference = "cpu"
+
+        def _run_parallax() -> None:
+            image_bytes, suffix = image_payload
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_dir = Path(tmpdir)
+                input_path = tmp_dir / f"parallax_input{suffix}"
+                input_path.write_bytes(image_bytes)
+                temp_output = tmp_dir / "parallax_output.mp4"
+
+                cmd = [
+                    sys.executable,
+                    str(script_path),
+                    str(input_path),
+                    str(temp_output),
+                    "--seconds",
+                    str(duration_seconds),
+                    "--device",
+                    device_preference,
+                    "--layers",
+                    str(PARALLAX_DEFAULT_LAYERS),
+                ]
+
+                completed = subprocess.run(
+                    cmd,
+                    check=False,
+                    cwd=str(APP_DIR),
+                    capture_output=True,
+                    text=True,
+                )
+                if completed.returncode != 0:
+                    stderr = (completed.stderr or "").strip()
+                    stdout = (completed.stdout or "").strip()
+                    message = stderr or stdout or "Unknown parallax error"
+                    snippet = message[:400]
+                    raise RuntimeError(snippet)
+                if not temp_output.exists():
+                    raise RuntimeError("Parallax animation did not produce a video file.")
+                output_path.write_bytes(temp_output.read_bytes())
+
+        try:
+            await asyncio.to_thread(_run_parallax)
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"Parallax animation failed: {exc}") from exc
+        result_model = PARALLAX_MODEL_ID
     else:
         if genai is None:
             raise HTTPException(status_code=500, detail="google-genai package is not installed on the server.")

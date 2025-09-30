@@ -1528,6 +1528,45 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("image_data_url", gen_mock.await_args.kwargs)
         self.assertGreaterEqual(broadcast.await_count, 1)
 
+    async def test_static_framepack_requires_existing_image(self):
+        rpg.game_state.settings["video_model"] = rpg.FRAMEPACK_STATIC_MODEL_ID
+        rpg.game_state.last_image_data_url = None
+
+        with mock.patch("rpg.generate_scene_video", new=mock.AsyncMock()) as gen_mock:
+            await rpg.schedule_auto_scene_video("Arcane camera sweep", 2)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        gen_mock.assert_not_awaited()
+        self.assertIsNone(rpg.game_state.scene_video)
+
+    async def test_static_framepack_passes_image_to_generator(self):
+        rpg.game_state.settings["video_model"] = rpg.FRAMEPACK_STATIC_MODEL_ID
+        requested_turn = 3
+        rpg.game_state.turn_index = requested_turn
+        rpg.game_state.last_image_data_url = "data:image/png;base64,static"
+
+        fake_video = rpg.SceneVideo(
+            url="/generated_media/static.mp4",
+            prompt="Arcane camera sweep",
+            negative_prompt=None,
+            model=rpg.FRAMEPACK_STATIC_MODEL_ID,
+            updated_at=123.0,
+            file_path=str(rpg.GENERATED_MEDIA_DIR / "static.mp4"),
+        )
+
+        with mock.patch("rpg.broadcast_public", new=mock.AsyncMock()), \
+                mock.patch("rpg.announce", new=mock.AsyncMock()), \
+                mock.patch("rpg.generate_scene_video", new=mock.AsyncMock(return_value=fake_video)) as gen_mock:
+            await rpg.schedule_auto_scene_video("Arcane camera sweep", requested_turn)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        gen_mock.assert_awaited_once()
+        self.assertEqual(gen_mock.await_args.kwargs.get("image_data_url"), rpg.game_state.last_image_data_url)
+        self.assertEqual(gen_mock.await_args.kwargs.get("turn_index"), requested_turn)
+        self.assertIs(rpg.game_state.scene_video, fake_video)
+
     async def test_skips_when_disabled(self):
         rpg.game_state.auto_video_enabled = False
         with mock.patch("rpg.generate_scene_video", new=mock.AsyncMock()) as gen_mock:

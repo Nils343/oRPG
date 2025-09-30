@@ -494,6 +494,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             image_data_url: Optional[str],
             negative_prompt: Optional[str],
             requested_duration: float,
+            **kwargs: Any,
         ) -> None:
             output_path.write_bytes(b"mp4data")
             self.assertIsNone(image_data_url)
@@ -521,6 +522,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             image_data_url: Optional[str],
             negative_prompt: Optional[str],
             requested_duration: float,
+            **kwargs: Any,
         ) -> None:
             output_path.write_bytes(b"mp4data")
             captured_duration.append(requested_duration)
@@ -558,6 +560,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             image_data_url: Optional[str],
             negative_prompt: Optional[str],
             requested_duration: float,
+            **kwargs: Any,
         ) -> None:
             output_path.write_bytes(b"mp4data")
 
@@ -578,6 +581,126 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(result.model, rpg.FRAMEPACK_MODEL_ID)
+
+    async def test_parallax_requires_existing_image(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            with mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir):
+                with self.assertRaises(rpg.HTTPException) as excinfo:
+                    await rpg.generate_scene_video("Prompt", model=rpg.PARALLAX_MODEL_ID)
+
+        self.assertEqual(excinfo.exception.status_code, 400)
+        self.assertIn("requires an existing image", excinfo.exception.detail)
+
+    async def test_parallax_generation_invokes_script(self) -> None:
+        pixel = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            "AAAADUlEQVR4nGP4//8/AwAI/AL+F2ZF7QAAAABJRU5ErkJggg=="
+        )
+
+        def fake_run(cmd: list[str], *, check: bool, cwd: str, capture_output: bool, text: bool):
+            output_path = Path(cmd[3])
+            output_path.write_bytes(b"mp4")
+            return types.SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg.asyncio.to_thread", side_effect=lambda func, *a, **kw: func()),
+                mock.patch("rpg.record_video_usage") as usage_mock,
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=2.5),
+                mock.patch("rpg.secrets.token_hex", return_value="abcd"),
+                mock.patch("rpg.time.time", side_effect=[1000.0, 1001.0]),
+                mock.patch("rpg.subprocess.run", side_effect=fake_run) as run_mock,
+            ):
+                video = await rpg.generate_scene_video(
+                    "Prompt",
+                    model=rpg.PARALLAX_MODEL_ID,
+                    image_data_url=pixel,
+                )
+                saved_path = Path(video.file_path)
+                exists_after = saved_path.exists()
+
+        self.assertTrue(exists_after)
+        self.assertEqual(video.model, rpg.PARALLAX_MODEL_ID)
+        usage_mock.assert_called_once_with(rpg.PARALLAX_MODEL_ID, seconds=2.5, turn_index=None)
+        self.assertEqual(run_mock.call_count, 1)
+
+    async def test_static_framepack_requires_existing_image(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=mock.AsyncMock()) as framepack_mock,
+            ):
+                with self.assertRaises(rpg.HTTPException) as excinfo:
+                    await rpg.generate_scene_video("Prompt", model=rpg.FRAMEPACK_STATIC_MODEL_ID)
+
+        self.assertEqual(excinfo.exception.status_code, 400)
+        self.assertIn("requires an existing image", excinfo.exception.detail)
+        framepack_mock.assert_not_awaited()
+
+    async def test_static_framepack_uses_image_and_empty_prompt(self) -> None:
+        pixel = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            "AAAADUlEQVR4nGP4//8/AwAI/AL+F2ZF7QAAAABJRU5ErkJggg=="
+        )
+
+        captured: dict[str, Any] = {}
+
+        async def fake_static_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+            requested_duration: float,
+            prompt_override: Optional[str] = None,
+            require_image: bool = False,
+            require_image_error: Optional[str] = None,
+            use_image_as_end_frame: bool = False,
+            end_frame_influence: Optional[float] = None,
+        ) -> None:
+            captured.update(
+                prompt_text=prompt_text,
+                image_data_url=image_data_url,
+                negative_prompt=negative_prompt,
+                requested_duration=requested_duration,
+                prompt_override=prompt_override,
+                require_image=require_image,
+                require_image_error=require_image_error,
+                use_image_as_end_frame=use_image_as_end_frame,
+                end_frame_influence=end_frame_influence,
+            )
+            output_path.write_bytes(b"static")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            rpg.game_state.last_image_data_url = pixel
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_static_framepack),
+                mock.patch("rpg.record_video_usage") as usage_mock,
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=1.2),
+                mock.patch("rpg.secrets.token_hex", return_value="abcd"),
+                mock.patch("rpg.time.time", side_effect=[1000.0, 1001.0]),
+            ):
+                video = await rpg.generate_scene_video(
+                    "Prompt",
+                    model=rpg.FRAMEPACK_STATIC_MODEL_ID,
+                )
+                saved_path = Path(video.file_path)
+                exists_after = saved_path.exists()
+
+        self.assertTrue(exists_after)
+        self.assertEqual(video.model, rpg.FRAMEPACK_STATIC_MODEL_ID)
+        usage_mock.assert_called_once_with(rpg.FRAMEPACK_STATIC_MODEL_ID, seconds=1.2, turn_index=None)
+        self.assertEqual(captured["image_data_url"], pixel)
+        self.assertEqual(captured["prompt_override"], "")
+        self.assertTrue(captured["require_image"])
+        self.assertTrue(captured["use_image_as_end_frame"])
+        self.assertEqual(captured["end_frame_influence"], rpg.FRAMEPACK_STATIC_END_INFLUENCE)
 
     async def test_scene_video_generation_avoids_overwriting_files(self) -> None:
         class DummyOperation:
@@ -641,6 +764,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             image_data_url: Optional[str],
             negative_prompt: Optional[str],
             requested_duration: float,
+            **kwargs: Any,
         ) -> None:
             output_path.write_bytes(b"mp4data")
             captured_duration.append(requested_duration)

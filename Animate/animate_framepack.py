@@ -64,20 +64,26 @@ def submit_job(
     prompt: str,
     duration: float,
     model: str,
+    *,
+    end_frame: Path | None = None,
+    end_frame_influence: float = 1.0,
+    negative_prompt: str = "",
+    seed: int = 2500,
 ):
     """Kick off an animation job and return FramePack's job identifier."""
 
     start_frame = handle_file(str(image_path)) if image_path is not None else None
+    end_frame_input = handle_file(str(end_frame)) if end_frame is not None else None
 
     result = client.predict(
         model,  # Generation Type
         start_frame,  # Start Frame
         None,  # Video Input (unused)
-        None,  # End Frame
-        1.0,  # End Frame Influence
+        end_frame_input,  # End Frame
+        end_frame_influence,  # End Frame Influence
         prompt,
-        "",  # Negative Prompt
-        2500,  # Seed
+        negative_prompt,
+        seed,
         False,  # Randomize
         duration,  # Video length (seconds)
         9,  # Latent window size

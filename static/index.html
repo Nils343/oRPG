@@ -3996,6 +3996,22 @@ F11</span>
             videoOptions.push({ value: 'FramePack', label: 'FramePack', helper: 'FramePack' });
           }
 
+          if (!videoOptions.some(entry => entry.value.toLowerCase() === 'static framepack')) {
+            videoOptions.push({
+              value: 'Static FramePack',
+              label: 'Static FramePack',
+              helper: 'Reuse the generated still image for a subtle FramePack drift',
+            });
+          }
+
+          if (!videoOptions.some(entry => entry.value.toLowerCase() === 'parallax')) {
+            videoOptions.push({
+              value: 'Parallax',
+              label: 'Parallax',
+              helper: 'Animate an existing image with a parallax camera move',
+            });
+          }
+
           videoOptions.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
           videoOptions.forEach(entry => {
             const opt = document.createElement('option');
