@@ -975,3 +975,51 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         gen_mock.assert_awaited_once()
         args, _ = gen_mock.await_args
         self.assertEqual(args[1], rpg.FRAMEPACK_MODEL_ID)
+
+    async def test_auto_video_generates_required_image_before_animation(self) -> None:
+        rpg.game_state.settings["video_model"] = rpg.PARALLAX_MODEL_ID
+        rpg.game_state.last_image_prompt = "Storm cliffs"
+        rpg.game_state.last_video_prompt = None
+
+        new_video = rpg.SceneVideo(
+            url="/generated_media/parallax.mp4",
+            prompt="Storm cliffs",
+            negative_prompt=None,
+            model=rpg.PARALLAX_MODEL_ID,
+            updated_at=9.0,
+            file_path="/tmp/parallax.mp4",
+        )
+
+        tasks: list[asyncio.Task] = []
+        loop = asyncio.get_running_loop()
+
+        def create_task_side_effect(coro):
+            task = loop.create_task(coro)
+            tasks.append(task)
+            return task
+
+        async def fake_generate_image(prompt: str, index: int):
+            self.assertEqual(prompt, "Storm cliffs")
+            rpg.game_state.last_image_data_url = "data:image/png;base64,AAA"
+            rpg.game_state.last_image_turn_index = index
+            rpg.game_state.last_scene_image_turn_index = index
+            return rpg.game_state.last_image_data_url
+
+        with (
+            mock.patch.object(rpg, "STATE_LOCK", asyncio.Lock()),
+            mock.patch("rpg._generate_scene_image_for_auto", side_effect=fake_generate_image) as image_mock,
+            mock.patch("rpg.generate_scene_video", new=mock.AsyncMock(return_value=new_video)) as gen_mock,
+            mock.patch("rpg._clear_scene_video"),
+            mock.patch("rpg.announce", new=mock.AsyncMock()),
+            mock.patch("rpg.broadcast_public", new=mock.AsyncMock()),
+            mock.patch("rpg.asyncio.create_task", side_effect=create_task_side_effect),
+            mock.patch("rpg.asyncio.sleep", new=mock.AsyncMock()),
+        ):
+            await rpg.schedule_auto_scene_video("Storm cliffs", 7)
+            await asyncio.gather(*tasks)
+
+        image_mock.assert_awaited_once_with("Storm cliffs", 7)
+        gen_mock.assert_awaited_once()
+        kwargs = gen_mock.await_args.kwargs
+        self.assertEqual(kwargs.get("image_data_url"), "data:image/png;base64,AAA")
+        self.assertEqual(rpg.game_state.scene_video, new_video)

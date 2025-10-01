@@ -263,6 +263,41 @@ def _is_parallax_model(model: Optional[str]) -> bool:
     return str(model).strip().lower() == PARALLAX_MODEL_ID.lower()
 
 
+def _model_requires_reference_image(model: Optional[str]) -> bool:
+    return _is_parallax_model(model) or _is_framepack_static_model(model)
+
+
+def _scene_image_available_for_turn(turn_index: Optional[int]) -> bool:
+    if not game_state.last_image_data_url:
+        return False
+    if isinstance(turn_index, int):
+        return (
+            game_state.last_scene_image_turn_index == turn_index
+            or game_state.last_image_turn_index == turn_index
+        )
+    return True
+
+
+async def _generate_scene_image_for_auto(turn_prompt: str, turn_index: Optional[int]) -> Optional[str]:
+    prompt_text = (turn_prompt or "").strip()
+    if not prompt_text:
+        return None
+    img_model = game_state.settings.get("image_model") or "gemini-2.5-flash-image-preview"
+    data_url = await gemini_generate_image(
+        img_model,
+        prompt_text,
+        purpose="scene",
+        turn_index=turn_index,
+    )
+    _clear_scene_video()
+    game_state.last_image_data_url = data_url
+    game_state.last_manual_scene_image_turn_index = None
+    game_state.last_image_prompt = prompt_text
+    await announce("Image generated.")
+    await broadcast_public()
+    return data_url
+
+
 def _load_framepack_module():
     try:
         return importlib.import_module("Animate.animate_framepack")
@@ -2621,8 +2656,6 @@ async def schedule_auto_scene_video(
     if not game_state.auto_video_enabled:
         return
 
-    model_setting = game_state.settings.get("video_model")
-
     prompt_text = (prompt or game_state.last_video_prompt or game_state.last_image_prompt or "").strip()
     if not prompt_text:
         return
@@ -2674,31 +2707,63 @@ async def schedule_auto_scene_video(
                     last_turn = game_state.last_scene_video_turn_index
                     if isinstance(last_turn, int) and last_turn == turn_index:
                         return
-                game_state.lock = LockState(active=True, reason="generating_video")
+                model_setting = game_state.settings.get("video_model")
+                requires_image = _model_requires_reference_image(model_setting)
+                need_image_generation = requires_image and not _scene_image_available_for_turn(turn_index)
+                lock_reason = "generating_video"
+                if need_image_generation:
+                    lock_reason = "generating_image"
+                game_state.lock = LockState(active=True, reason=lock_reason)
                 await broadcast_public()
 
             try:
+                if need_image_generation:
+                    image_prompt = (game_state.last_image_prompt or current_prompt).strip()
+                    if not image_prompt:
+                        print(
+                            "Auto video generation skipped: missing prompt to create required scene image.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        return
+                    try:
+                        await _generate_scene_image_for_auto(image_prompt, turn_index)
+                    except HTTPException as exc:
+                        print(
+                            f"Auto video generation aborted: prerequisite image failed ({exc.detail}).",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        return
+                    except Exception as exc:  # noqa: BLE001
+                        print(
+                            f"Auto video generation aborted: error creating prerequisite image ({exc!r}).",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        return
+                    async with STATE_LOCK:
+                        if not game_state.auto_video_enabled:
+                            game_state.lock = LockState(active=False, reason="")
+                            await broadcast_public()
+                            return
+                        model_setting = game_state.settings.get("video_model")
+                        game_state.lock = LockState(active=True, reason="generating_video")
+                        await broadcast_public()
+
                 image_for_video: Optional[str] = None
-                if _is_parallax_model(model_setting):
-                    source_image = game_state.last_image_data_url
-                    if not source_image:
+                if _model_requires_reference_image(model_setting):
+                    if not _scene_image_available_for_turn(turn_index):
                         print(
-                            "Auto video generation skipped: Parallax requires an existing image.",
+                            "Auto video generation skipped: required scene image still unavailable after generation attempt.",
                             file=sys.stderr,
                             flush=True,
                         )
                         return
-                    image_for_video = source_image
-                elif _is_framepack_static_model(model_setting):
-                    source_image = game_state.last_image_data_url
-                    if not source_image:
-                        print(
-                            "Auto video generation skipped: Static FramePack requires an existing image.",
-                            file=sys.stderr,
-                            flush=True,
-                        )
-                        return
-                    image_for_video = source_image
+                    image_for_video = game_state.last_image_data_url
+                elif _is_framepack_model(model_setting):
+                    if game_state.last_image_data_url:
+                        image_for_video = game_state.last_image_data_url
                 video_kwargs = {
                     "negative_prompt": current_negative,
                     "turn_index": turn_index,
