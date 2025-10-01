@@ -133,8 +133,9 @@
   .player-portrait.has-image { background-size:cover; background-position:center; color:transparent; }
   .player-portrait[data-clickable="false"] { cursor:default; opacity:0.6; border-color:#222736; }
   .player-portrait[data-clickable="true"]:hover { border-color: var(--accent2); color: var(--accent2); }
-  .portrait-preview { position:fixed; z-index:9999; display:none; pointer-events:none; border:1px solid rgba(137,220,235,0.7); border-radius:12px; background: rgba(10,12,19,0.92); box-shadow:0 18px 48px rgba(0,0,0,0.45); padding:10px; max-width:min(320px, 50vw); max-height:min(320px, 50vh); }
-  .portrait-preview img { display:block; width:100%; height:auto; max-height:calc(min(320px, 50vh) - 20px); border-radius:8px; }
+  .portrait-preview { position:fixed; z-index:9999; display:none; pointer-events:none; border:1px solid rgba(137,220,235,0.7); border-radius:12px; background: rgba(10,12,19,0.92); box-shadow:0 18px 48px rgba(0,0,0,0.45); padding:12px; max-width:min(520px, 60vw); max-height:min(640px, 70vh); overflow:auto; }
+  .portrait-preview img { display:block; width:100%; height:auto; border-radius:8px; }
+  .portrait-preview .portrait-preview-turnaround { margin-top:12px; }
   .pill { padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #2a3142; }
   .player-status { display:inline-flex; align-items:center; white-space:nowrap; }
   .good { color: var(--ok); border-color: var(--ok); }
@@ -1736,6 +1737,8 @@ F11</span>
     "game.playerTag.joining": { en: "joining soon", de: "tritt bald bei" },
     "game.portrait.previewAlt": { en: "Player portrait preview", de: "Spielerportrait-Vorschau" },
     "game.portrait.previewWithPrompt": { en: "Portrait preview — {{prompt}}", de: "Porträtvorschau – {{prompt}}" },
+    "game.portrait.turnaroundAlt": { en: "Character turnaround reference", de: "Charakter-Referenzansicht" },
+    "game.portrait.turnaroundWithPrompt": { en: "Turnaround reference — {{prompt}}", de: "Referenzansicht – {{prompt}}" },
     "game.portrait.tooltip.generate": { en: "Click to generate your portrait.", de: "Klicke, um dein Porträt zu generieren." },
     "game.portrait.tooltip.hover": { en: "Hover to preview this portrait.", de: "Fahre mit der Maus über dieses Porträt, um eine Vorschau zu sehen." },
     "game.portrait.tooltip.lockedBusy": { en: "Portrait generation is paused while the GM is busy.", de: "Porträterstellung pausiert, während der SL beschäftigt ist." },
@@ -3227,6 +3230,8 @@ F11</span>
 
   let portraitPreviewEl = null;
   let portraitPreviewImg = null;
+  let portraitPreviewSheetWrapper = null;
+  let portraitPreviewSheetImg = null;
   let portraitPreviewFrame = null;
   const portraitPreviewState = {
     clientX: null,
@@ -3238,9 +3243,20 @@ F11</span>
     if (!portraitPreviewEl) {
       portraitPreviewEl = document.createElement("div");
       portraitPreviewEl.className = "portrait-preview";
+      const primaryWrapper = document.createElement("div");
+      primaryWrapper.className = "portrait-preview-primary";
       portraitPreviewImg = document.createElement("img");
       portraitPreviewImg.alt = t('game.portrait.previewAlt');
-      portraitPreviewEl.appendChild(portraitPreviewImg);
+      primaryWrapper.appendChild(portraitPreviewImg);
+      portraitPreviewEl.appendChild(primaryWrapper);
+
+      portraitPreviewSheetWrapper = document.createElement("div");
+      portraitPreviewSheetWrapper.className = "portrait-preview-turnaround";
+      portraitPreviewSheetWrapper.style.display = "none";
+      portraitPreviewSheetImg = document.createElement("img");
+      portraitPreviewSheetImg.alt = t('game.portrait.turnaroundAlt');
+      portraitPreviewSheetWrapper.appendChild(portraitPreviewSheetImg);
+      portraitPreviewEl.appendChild(portraitPreviewSheetWrapper);
       document.body.appendChild(portraitPreviewEl);
     }
     return portraitPreviewEl;
@@ -3310,13 +3326,32 @@ F11</span>
     portraitPreviewEl.style.top = `${Math.max(padding, top)}px`;
   }
 
-  function showPortraitPreview(src, prompt, evt, fallbackEl) {
-    if (!src) return;
+  function showPortraitPreview(preview, evt, fallbackEl) {
+    if (!preview || !preview.src) return;
     const el = ensurePortraitPreview();
     if (!portraitPreviewImg) return;
-    portraitPreviewImg.src = src;
-    const altText = prompt ? t('game.portrait.previewWithPrompt', { prompt }) : t('game.portrait.previewAlt');
+    portraitPreviewImg.src = preview.src;
+    const altText = preview.prompt
+      ? t('game.portrait.previewWithPrompt', { prompt: preview.prompt })
+      : t('game.portrait.previewAlt');
     portraitPreviewImg.alt = altText;
+
+    if (portraitPreviewSheetWrapper && portraitPreviewSheetImg) {
+      const hasTurnaround = Boolean(preview.turnaroundSrc);
+      if (hasTurnaround) {
+        portraitPreviewSheetWrapper.style.display = "block";
+        portraitPreviewSheetImg.src = preview.turnaroundSrc;
+        const turnaroundAlt = preview.turnaroundPrompt
+          ? t('game.portrait.turnaroundWithPrompt', { prompt: preview.turnaroundPrompt })
+          : t('game.portrait.turnaroundAlt');
+        portraitPreviewSheetImg.alt = turnaroundAlt;
+      } else {
+        portraitPreviewSheetWrapper.style.display = "none";
+        portraitPreviewSheetImg.src = "";
+        portraitPreviewSheetImg.alt = "";
+      }
+    }
+
     el.style.display = "block";
     updatePortraitPreviewPosition(evt, fallbackEl);
   }
@@ -5032,6 +5067,7 @@ F11</span>
       portraitBtn.dataset.owned = isYou ? "true" : "false";
       portraitBtn.dataset.pending = p.pending_join ? "true" : "false";
       const portrait = p.portrait || null;
+      const initial = (p.name || "?").trim().charAt(0).toUpperCase() || "?";
       if (portrait && portrait.data_url) {
         portraitBtn.style.backgroundImage = `url(${portrait.data_url})`;
         portraitBtn.classList.add("has-image");
@@ -5039,19 +5075,33 @@ F11</span>
         portraitBtn.dataset.hasImage = "true";
         portraitBtn.dataset.portraitUrl = portrait.data_url;
         portraitBtn.dataset.portraitPrompt = portrait.prompt || "";
-        portraitBtn.addEventListener("mouseenter", (ev) => showPortraitPreview(portraitBtn.dataset.portraitUrl, portraitBtn.dataset.portraitPrompt, ev, portraitBtn));
+        const turnaround = portrait.turnaround || null;
+        portraitBtn.dataset.turnaroundUrl = (turnaround && turnaround.data_url) ? turnaround.data_url : "";
+        portraitBtn.dataset.turnaroundPrompt = (turnaround && turnaround.prompt) ? turnaround.prompt : "";
+        portraitBtn.addEventListener("mouseenter", (ev) => showPortraitPreview({
+          src: portraitBtn.dataset.portraitUrl,
+          prompt: portraitBtn.dataset.portraitPrompt,
+          turnaroundSrc: portraitBtn.dataset.turnaroundUrl,
+          turnaroundPrompt: portraitBtn.dataset.turnaroundPrompt,
+        }, ev, portraitBtn));
         portraitBtn.addEventListener("mousemove", (ev) => updatePortraitPreviewPosition(ev, portraitBtn));
         portraitBtn.addEventListener("mouseleave", hidePortraitPreview);
-        portraitBtn.addEventListener("focus", () => showPortraitPreview(portraitBtn.dataset.portraitUrl, portraitBtn.dataset.portraitPrompt, null, portraitBtn));
+        portraitBtn.addEventListener("focus", () => showPortraitPreview({
+          src: portraitBtn.dataset.portraitUrl,
+          prompt: portraitBtn.dataset.portraitPrompt,
+          turnaroundSrc: portraitBtn.dataset.turnaroundUrl,
+          turnaroundPrompt: portraitBtn.dataset.turnaroundPrompt,
+        }, null, portraitBtn));
         portraitBtn.addEventListener("blur", hidePortraitPreview);
       } else {
         portraitBtn.style.backgroundImage = "";
         portraitBtn.classList.remove("has-image");
-        const initial = (p.name || "?").trim().charAt(0).toUpperCase() || "?";
         portraitBtn.textContent = initial;
         portraitBtn.dataset.hasImage = "false";
         portraitBtn.dataset.portraitUrl = "";
         portraitBtn.dataset.portraitPrompt = "";
+        portraitBtn.dataset.turnaroundUrl = "";
+        portraitBtn.dataset.turnaroundPrompt = "";
         portraitBtn.addEventListener("mouseenter", hidePortraitPreview);
         portraitBtn.addEventListener("mouseleave", hidePortraitPreview);
         portraitBtn.addEventListener("focus", hidePortraitPreview);

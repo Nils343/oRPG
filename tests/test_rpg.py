@@ -1468,7 +1468,7 @@ class MaybeQueueSceneImageTests(unittest.IsolatedAsyncioTestCase):
         requested_turn = 5
         rpg.game_state.turn_index = requested_turn
 
-        async def fake_generate(model, prompt, *, purpose, turn_index):
+        async def fake_generate(model, prompt, *, purpose, turn_index, reference_players=None):
             self.assertEqual(purpose, "scene")
             self.assertEqual(turn_index, requested_turn)
             # Simulate the turn advancing before usage is recorded
@@ -1496,6 +1496,18 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         rpg.game_state.auto_video_enabled = True
         rpg.game_state.last_video_prompt = "Arcane camera sweep"
         rpg.game_state.last_image_data_url = "data:image/png;base64,example"
+        rpg.game_state.players["p1"] = rpg.Player(
+            id="p1",
+            name="Hero",
+            background="Scholar",
+            character_class="Wizard",
+        )
+        rpg.game_state.players["p2"] = rpg.Player(
+            id="p2",
+            name="Shade",
+            background="Scout",
+            character_class="Rogue",
+        )
 
     async def test_generates_video_and_tracks_turn(self):
         requested_turn = 7
@@ -1523,7 +1535,11 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(rpg.game_state.lock.active)
         announce_mock.assert_awaited_once()
         gen_mock.assert_awaited()
-        self.assertEqual(gen_mock.await_args.args[0], "Arcane camera sweep")
+        video_prompt = gen_mock.await_args.args[0]
+        self.assertTrue(video_prompt.startswith("Arcane camera sweep"))
+        self.assertIn("Character roster for consistency:", video_prompt)
+        self.assertIn("Hero (Wizard, Scholar)", video_prompt)
+        self.assertIn("Shade (Rogue, Scout)", video_prompt)
         self.assertEqual(gen_mock.await_args.kwargs.get("turn_index"), requested_turn)
         self.assertNotIn("image_data_url", gen_mock.await_args.kwargs)
         self.assertGreaterEqual(broadcast.await_count, 1)
@@ -1545,6 +1561,9 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         requested_turn = 3
         rpg.game_state.turn_index = requested_turn
         rpg.game_state.last_image_data_url = "data:image/png;base64,static"
+        rpg.game_state.last_scene_image_turn_index = requested_turn
+        rpg.game_state.last_image_kind = "scene"
+        rpg.game_state.last_image_turn_index = requested_turn
 
         fake_video = rpg.SceneVideo(
             url="/generated_media/static.mp4",
@@ -1565,6 +1584,49 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         gen_mock.assert_awaited_once()
         self.assertEqual(gen_mock.await_args.kwargs.get("image_data_url"), rpg.game_state.last_image_data_url)
         self.assertEqual(gen_mock.await_args.kwargs.get("turn_index"), requested_turn)
+        self.assertIs(rpg.game_state.scene_video, fake_video)
+
+    async def test_auto_video_regenerates_scene_when_only_portrait_available(self):
+        rpg.game_state.settings["video_model"] = rpg.FRAMEPACK_STATIC_MODEL_ID
+        requested_turn = 5
+        rpg.game_state.turn_index = requested_turn
+        rpg.game_state.last_image_data_url = "data:image/png;base64,portrait"
+        rpg.game_state.last_image_kind = "portrait"
+        rpg.game_state.last_image_turn_index = requested_turn
+        rpg.game_state.last_scene_image_turn_index = None
+
+        async def fake_scene(prompt_text, turn_idx):
+            rpg.game_state.last_image_data_url = "data:image/png;base64,scene"
+            rpg.game_state.last_scene_image_turn_index = turn_idx
+            rpg.game_state.last_image_kind = "scene"
+            return rpg.game_state.last_image_data_url
+
+        fake_video = rpg.SceneVideo(
+            url="/generated_media/static.mp4",
+            prompt="Arcane camera sweep",
+            negative_prompt=None,
+            model=rpg.FRAMEPACK_STATIC_MODEL_ID,
+            updated_at=123.0,
+            file_path=str(rpg.GENERATED_MEDIA_DIR / "static.mp4"),
+        )
+
+        with mock.patch("rpg.broadcast_public", new=mock.AsyncMock()), \
+                mock.patch("rpg.announce", new=mock.AsyncMock()), \
+                mock.patch("rpg._generate_scene_image_for_auto", new=mock.AsyncMock(side_effect=fake_scene)) as image_mock, \
+                mock.patch("rpg.generate_scene_video", new=mock.AsyncMock(return_value=fake_video)) as video_mock:
+            await rpg.schedule_auto_scene_video("Arcane camera sweep", requested_turn)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        image_mock.assert_awaited_once()
+        self.assertEqual(image_mock.await_args.args[1], requested_turn)
+        video_mock.assert_awaited_once()
+        video_prompt = video_mock.await_args.args[0]
+        self.assertIn("Character roster for consistency:", video_prompt)
+        self.assertIn("Hero (Wizard, Scholar)", video_prompt)
+        self.assertIn("Shade (Rogue, Scout)", video_prompt)
+        self.assertEqual(video_mock.await_args.kwargs.get("image_data_url"), "data:image/png;base64,scene")
+        self.assertEqual(video_mock.await_args.kwargs.get("turn_index"), requested_turn)
         self.assertIs(rpg.game_state.scene_video, fake_video)
 
     async def test_skips_when_disabled(self):
@@ -1691,16 +1753,49 @@ class BuildSceneImagePartsTests(unittest.TestCase):
 
         self.assertIsNone(parts)
 
-    def test_inlines_portraits_and_builds_directives(self):
+    def test_falls_back_to_portrait_when_turnaround_missing(self):
+        portrait = rpg.PlayerPortrait(
+            data_url="data:image/png;base64," + base64.b64encode(b"portrait-only").decode("ascii"),
+            prompt="Fallback portrait",
+            updated_at=9.0,
+        )
+        rpg.game_state.players["solo"] = rpg.Player(
+            id="solo",
+            name="Lone",
+            background="Wanderer",
+            character_class="Guard",
+            portrait=portrait,
+        )
+
+        parts = rpg._build_scene_image_parts("Desert watch")
+
+        self.assertIsNotNone(parts)
+        inline_part = parts[0]["inlineData"]
+        self.assertEqual(inline_part["data"], base64.b64encode(b"portrait-only").decode("ascii"))
+        text_block = parts[-1]["text"]
+        self.assertIn("rely on the fallback portrait reference", text_block)
+        self.assertIn("Lone: match the portrait reference exactly (Guard, Wanderer).", text_block)
+
+    def test_inlines_turnarounds_and_builds_directives(self):
         portrait_a = rpg.PlayerPortrait(
             data_url="data:image/png;base64," + base64.b64encode(b"portrait-a").decode("ascii"),
             prompt="Hero portrait",
             updated_at=10.0,
+            turnaround=rpg.PortraitTurnaround(
+                data_url="data:image/png;base64," + base64.b64encode(b"turnaround-a").decode("ascii"),
+                prompt="Hero turnaround",
+                updated_at=12.0,
+            ),
         )
         portrait_b = rpg.PlayerPortrait(
             data_url="data:image/png;base64," + base64.b64encode(b"portrait-b").decode("ascii"),
             prompt="Rogue portrait",
             updated_at=11.0,
+            turnaround=rpg.PortraitTurnaround(
+                data_url="data:image/png;base64," + base64.b64encode(b"turnaround-b").decode("ascii"),
+                prompt="Rogue turnaround",
+                updated_at=13.0,
+            ),
         )
         rpg.game_state.players["alpha"] = rpg.Player(
             id="alpha",
@@ -1726,19 +1821,19 @@ class BuildSceneImagePartsTests(unittest.TestCase):
         parts = rpg._build_scene_image_parts("Fog-laden city rooftops")
 
         self.assertIsNotNone(parts)
-        self.assertEqual(len(parts), 3)  # two portraits + directive block
+        self.assertEqual(len(parts), 3)  # two turnarounds + directive block
         inline_part = parts[0]["inlineData"]
         self.assertEqual(inline_part["mimeType"], "image/png")
-        self.assertEqual(inline_part["data"], base64.b64encode(b"portrait-a").decode("ascii"))
+        self.assertEqual(inline_part["data"], base64.b64encode(b"turnaround-a").decode("ascii"))
 
         text_block = parts[-1]["text"]
         self.assertIn("World style: Steampunk", text_block)
-        self.assertIn("Hero: match the portrait reference (Wizard, Scholar, mood: focused).", text_block)
+        self.assertIn("Hero: match the turnaround sheet exactly (Wizard, Scholar, mood: focused).", text_block)
         self.assertIn("Hero: include visible gear from inventory (wand, satchel).", text_block)
         self.assertIn("Hero: reflect current conditions (wounded).", text_block)
         self.assertIn("Scene prompt: Fog-laden city rooftops", text_block)
         # Shade has no additional descriptors beyond class/background line
-        self.assertIn("Shade: match the portrait reference (Rogue, Scout).", text_block)
+        self.assertIn("Shade: match the turnaround sheet exactly (Rogue, Scout).", text_block)
 
 
 class PublicSnapshotPrivacyTests(unittest.TestCase):
@@ -1809,6 +1904,8 @@ class PublicSnapshotPrivacyTests(unittest.TestCase):
         self.assertIsInstance(portrait, dict)
         self.assertEqual(portrait["data_url"], "data:image/png;base64,portrait")
         self.assertEqual(portrait["prompt"], "prompt text")
+        self.assertIn("turnaround", portrait)
+        self.assertIsNone(portrait["turnaround"])
 
     def test_snapshot_includes_image_and_token_stats(self):
         rpg.game_state.last_image_data_url = "data:image/png;base64,xyz"
@@ -3290,14 +3387,42 @@ class CreatePortraitTests(unittest.IsolatedAsyncioTestCase):
         gen.assert_awaited_once()
         self.assertEqual(gen.await_args.kwargs.get("purpose"), "portrait")
 
-    async def test_successful_generation_updates_state(self):
-        expected_prompt = rpg.build_portrait_prompt(rpg.game_state.players["p1"])
+    async def test_turnaround_failure_rolls_back(self):
         portrait_data = "data:image/png;base64," + base64.b64encode(b"portrait").decode("ascii")
 
         with mock.patch("rpg.broadcast_public", new=mock.AsyncMock()) as broadcast, \
                 mock.patch("rpg.announce", new=mock.AsyncMock()) as announce, \
                 mock.patch("rpg.send_private", new=mock.AsyncMock()) as send_private, \
-                mock.patch("rpg.gemini_generate_image", new=mock.AsyncMock(return_value=portrait_data)) as gen, \
+                mock.patch(
+                    "rpg.gemini_generate_image",
+                    new=mock.AsyncMock(side_effect=[portrait_data, RuntimeError("turnaround fail")]),
+                ) as gen:
+            body = rpg.CreatePortraitBody(player_id="p1", token="tok-portrait")
+            with self.assertRaises(RuntimeError):
+                await rpg.create_portrait(body)
+
+        self.assertFalse(rpg.game_state.lock.active)
+        self.assertEqual(rpg.game_state.lock.reason, "")
+        self.assertIsNone(rpg.game_state.players["p1"].portrait)
+        self.assertGreaterEqual(broadcast.await_count, 2)
+        announce.assert_not_awaited()
+        send_private.assert_not_awaited()
+        self.assertEqual(gen.await_count, 2)
+        self.assertEqual(gen.await_args_list[0].kwargs.get("purpose"), "portrait")
+        self.assertEqual(gen.await_args_list[1].kwargs.get("purpose"), "portrait_turnaround")
+
+    async def test_successful_generation_updates_state(self):
+        expected_prompt = rpg.build_portrait_prompt(rpg.game_state.players["p1"])
+        expected_turnaround_prompt = rpg.build_portrait_turnaround_prompt(
+            rpg.game_state.players["p1"], expected_prompt
+        )
+        portrait_data = "data:image/png;base64," + base64.b64encode(b"portrait").decode("ascii")
+        turnaround_data = "data:image/png;base64," + base64.b64encode(b"turnaround").decode("ascii")
+
+        with mock.patch("rpg.broadcast_public", new=mock.AsyncMock()) as broadcast, \
+                mock.patch("rpg.announce", new=mock.AsyncMock()) as announce, \
+                mock.patch("rpg.send_private", new=mock.AsyncMock()) as send_private, \
+                mock.patch("rpg.gemini_generate_image", new=mock.AsyncMock(side_effect=[portrait_data, turnaround_data])) as gen, \
                 mock.patch("rpg.time.time", return_value=123.0):
             body = rpg.CreatePortraitBody(player_id="p1", token="tok-portrait")
             result = await rpg.create_portrait(body)
@@ -3307,16 +3432,30 @@ class CreatePortraitTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["portrait"]["prompt"], expected_prompt)
         self.assertEqual(result["portrait"]["updated_at"], 123.0)
 
+        turnaround_payload = result["portrait"].get("turnaround")
+        self.assertIsInstance(turnaround_payload, dict)
+        self.assertEqual(turnaround_payload["data_url"], turnaround_data)
+        self.assertEqual(turnaround_payload["prompt"], expected_turnaround_prompt)
+        self.assertEqual(turnaround_payload["updated_at"], 123.0)
+
         portrait = rpg.game_state.players["p1"].portrait
         self.assertIsNotNone(portrait)
         self.assertEqual(portrait.data_url, portrait_data)
         self.assertEqual(portrait.prompt, expected_prompt)
         self.assertEqual(portrait.updated_at, 123.0)
+        self.assertIsNotNone(portrait.turnaround)
+        self.assertEqual(portrait.turnaround.data_url, turnaround_data)
+        self.assertEqual(portrait.turnaround.prompt, expected_turnaround_prompt)
+        self.assertEqual(portrait.turnaround.updated_at, 123.0)
 
         self.assertGreaterEqual(broadcast.await_count, 2)
         announce.assert_awaited_once_with("Alice's portrait updated.")
         send_private.assert_awaited_once_with("p1")
-        gen.assert_awaited_once()
+        self.assertEqual(gen.await_count, 2)
+        first_call_purpose = gen.await_args_list[0].kwargs.get("purpose")
+        second_call_purpose = gen.await_args_list[1].kwargs.get("purpose")
+        self.assertEqual(first_call_purpose, "portrait")
+        self.assertEqual(second_call_purpose, "portrait_turnaround")
         self.assertFalse(rpg.game_state.lock.active)
 
 class PromptLoadingTests(unittest.TestCase):
@@ -3917,6 +4056,77 @@ class GeminiGenerateImageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rpg.game_state.current_turn_image_counts, {})
         self.assertIsNone(rpg.game_state.current_turn_index_for_image_counts)
         self.assertEqual(rpg.game_state.image_counts_by_turn, {})
+
+    async def test_portrait_generation_uses_turnaround_reference_prompt(self):
+        turnaround_b64 = base64.b64encode(b"turnaround-reference").decode("ascii")
+        player = rpg.Player(id="p1", name="Marin", background="Navigator", character_class="Captain")
+        player.portrait = rpg.PlayerPortrait(
+            data_url="data:image/png;base64," + base64.b64encode(b"portrait").decode("ascii"),
+            prompt="Portrait prompt",
+            updated_at=111.0,
+            turnaround=rpg.PortraitTurnaround(
+                data_url="data:image/png;base64," + turnaround_b64,
+                prompt="Turnaround prompt",
+                updated_at=112.0,
+            ),
+        )
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self_inner):
+                return {
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "inlineData": {
+                                            "data": "result",
+                                            "mimeType": "image/png",
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+
+        class DummyClient:
+            last_json = None
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, *args, **kwargs):
+                DummyClient.last_json = kwargs.get("json")
+                return DummyResponse()
+
+        with mock.patch("httpx.AsyncClient", DummyClient):
+            await rpg.gemini_generate_image(
+                "gemini-2.5-flash-image-preview",
+                "Refine the portrait",
+                purpose="portrait",
+                reference_players=[player],
+            )
+
+        request_body = DummyClient.last_json
+        self.assertIsNotNone(request_body)
+        parts = request_body["contents"][0]["parts"]
+        self.assertEqual(len(parts), 2)
+        inline_part = parts[0]["inlineData"]
+        self.assertEqual(inline_part["data"], turnaround_b64)
+        self.assertEqual(inline_part["mimeType"], "image/png")
+        text_block = parts[1]["text"]
+        self.assertIn("turnaround sheets", text_block)
+        self.assertIn("Marin: replicate the turnaround sheet precisely.", text_block)
+        self.assertIn("Refine the portrait", text_block)
 
 
 class WebsocketEndpointTests(unittest.TestCase):

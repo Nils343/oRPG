@@ -680,6 +680,8 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             media_dir = Path(tmp_dir)
             rpg.game_state.last_image_data_url = pixel
+            rpg.game_state.last_scene_image_turn_index = 0
+            rpg.game_state.last_image_kind = "scene"
             with (
                 mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
                 mock.patch("rpg._generate_framepack_video", new=fake_static_framepack),

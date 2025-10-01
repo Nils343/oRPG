@@ -270,11 +270,11 @@ def _model_requires_reference_image(model: Optional[str]) -> bool:
 def _scene_image_available_for_turn(turn_index: Optional[int]) -> bool:
     if not game_state.last_image_data_url:
         return False
+    scene_turn = game_state.last_scene_image_turn_index
+    if scene_turn is None:
+        return False
     if isinstance(turn_index, int):
-        return (
-            game_state.last_scene_image_turn_index == turn_index
-            or game_state.last_image_turn_index == turn_index
-        )
+        return scene_turn == turn_index
     return True
 
 
@@ -288,6 +288,7 @@ async def _generate_scene_image_for_auto(turn_prompt: str, turn_index: Optional[
         prompt_text,
         purpose="scene",
         turn_index=turn_index,
+        reference_players=game_state.players.values(),
     )
     _clear_scene_video()
     game_state.last_image_data_url = data_url
@@ -1167,16 +1168,19 @@ def record_image_usage(
             game_state.last_scene_image_usd_per_image = None
             game_state.last_scene_image_turn_index = record_turn
 
-    if images > 0:
-        game_state.session_image_requests += images
-        game_state.session_image_kind_counts[purpose] = (
-            game_state.session_image_kind_counts.get(purpose, 0) + images
-        )
     normalized = (purpose or "unknown").strip().lower()
-    if normalized in {"scene", "portrait"}:
-        key = normalized
+    if normalized == "scene":
+        key = "scene"
+    elif normalized in {"portrait", "portrait_turnaround", "turnaround"}:
+        key = "portrait"
     else:
         key = "other"
+
+    if images > 0:
+        game_state.session_image_requests += images
+        game_state.session_image_kind_counts[key] = (
+            game_state.session_image_kind_counts.get(key, 0) + images
+        )
 
     if isinstance(record_turn, int):
         turn_counts = _bind_turn_image_bucket(record_turn)
@@ -1435,19 +1439,35 @@ class SummaryStructured(BaseModel):
 
 
 @dataclass
-class PlayerPortrait:
+class PortraitTurnaround:
     data_url: str
     prompt: str
     updated_at: float
 
 
+@dataclass
+class PlayerPortrait:
+    data_url: str
+    prompt: str
+    updated_at: float
+    turnaround: Optional[PortraitTurnaround] = None
+
+
 def portrait_payload(portrait: Optional["PlayerPortrait"]) -> Optional[Dict[str, Any]]:
     if not portrait:
         return None
+    turnaround_payload: Optional[Dict[str, Any]] = None
+    if portrait.turnaround:
+        turnaround_payload = {
+            "data_url": portrait.turnaround.data_url,
+            "prompt": portrait.turnaround.prompt,
+            "updated_at": portrait.turnaround.updated_at,
+        }
     return {
         "data_url": portrait.data_url,
         "prompt": portrait.prompt,
         "updated_at": portrait.updated_at,
+        "turnaround": turnaround_payload,
     }
 
 
@@ -2627,6 +2647,7 @@ async def schedule_auto_scene_image(prompt: Optional[str], turn_index: int, *, f
                     current_prompt,
                     purpose="scene",
                     turn_index=turn_index,
+                    reference_players=game_state.players.values(),
                 )
                 _clear_scene_video()
                 game_state.last_image_data_url = data_url
@@ -2762,7 +2783,7 @@ async def schedule_auto_scene_video(
                         return
                     image_for_video = game_state.last_image_data_url
                 elif _is_framepack_model(model_setting):
-                    if game_state.last_image_data_url:
+                    if _scene_image_available_for_turn(turn_index):
                         image_for_video = game_state.last_image_data_url
                 video_kwargs = {
                     "negative_prompt": current_negative,
@@ -2770,8 +2791,10 @@ async def schedule_auto_scene_video(
                 }
                 if image_for_video is not None:
                     video_kwargs["image_data_url"] = image_for_video
+                players_snapshot = list(game_state.players.values())
+                prompt_with_rollcall = _append_character_rollcall(current_prompt, players_snapshot)
                 new_video = await generate_scene_video(
-                    current_prompt,
+                    prompt_with_rollcall,
                     model_setting,
                     **video_kwargs,
                 )
@@ -3738,35 +3761,108 @@ def _parse_data_url(data_url: str) -> Optional[Tuple[str, str]]:
     return mime or "application/octet-stream", cleaned_data
 
 
-def _build_scene_image_parts(prompt: str) -> Optional[List[Dict[str, Any]]]:
-    """Assemble user parts for scene images.
+def _collect_player_reference_sources(players: Iterable[Player]) -> List[Tuple[Player, str, str, str]]:
+    """Return a list of (player, mime, data, kind) for available reference images.
 
-    - Inlines player portrait references so the image model can keep faces consistent.
-    - Adds concise directives per player to reflect their current inventory and conditions.
+    kind is "turnaround" when a turnaround sheet is available, otherwise "portrait" when
+    falling back to the portrait image.
     """
-    references: List[Tuple[Player, str, str]] = []
-    for player_id in sorted(game_state.players.keys()):
-        player = game_state.players[player_id]
+    sources: List[Tuple[Player, str, str, str]] = []
+    for player in players:
         portrait = player.portrait
-        if not portrait or not portrait.data_url:
+        if not portrait:
             continue
-        parsed = _parse_data_url(portrait.data_url)
+        data_url: Optional[str] = None
+        kind = "turnaround"
+        if portrait.turnaround and portrait.turnaround.data_url:
+            data_url = portrait.turnaround.data_url
+        elif portrait.data_url:
+            data_url = portrait.data_url
+            kind = "portrait"
+        if not data_url:
+            continue
+        parsed = _parse_data_url(data_url)
         if not parsed:
             continue
         mime, data = parsed
-        references.append((player, mime, data))
+        sources.append((player, mime, data, kind))
+    return sources
+
+
+def _character_rollcall(players: Iterable[Player]) -> Optional[str]:
+    entries: List[str] = []
+    for player in sorted(players, key=lambda p: p.name.casefold() if isinstance(p.name, str) else ""):
+        if not player.name:
+            continue
+        descriptors: List[str] = []
+        cls = (player.character_class or "").strip()
+        background = (player.background or "").strip()
+        if cls:
+            descriptors.append(cls)
+        if background and background.lower() != cls.lower():
+            descriptors.append(background)
+        status = (player.status_word or "").strip().lower()
+        if status and status not in {"", "unknown"}:
+            descriptors.append(f"mood: {status}")
+        if descriptors:
+            entries.append(f"{player.name} ({', '.join(descriptors)})")
+        else:
+            entries.append(player.name)
+    if not entries:
+        return None
+    return ", ".join(entries)
+
+
+def _append_character_rollcall(prompt_text: str, players: Iterable[Player]) -> str:
+    roster = _character_rollcall(players)
+    if not roster:
+        return prompt_text
+    base = (prompt_text or "").strip()
+    roster_sentence = (
+        "Character roster for consistency: "
+        f"{roster}. Ensure each named character matches their turnaround sheets and stays visually consistent."
+    )
+    if base:
+        return f"{base}\n\n{roster_sentence}"
+    return roster_sentence
+
+
+def _build_scene_image_parts(
+    prompt: str,
+    players_override: Optional[Iterable[Player]] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Assemble user parts for scene images with turnaround guidance."""
+
+    if players_override is None:
+        players_iter = [game_state.players[pid] for pid in sorted(game_state.players.keys())]
+    else:
+        players_iter = sorted(list(players_override), key=lambda p: p.id)
+
+    references = _collect_player_reference_sources(players_iter)
     if not references:
         return None
+
     parts: List[Dict[str, Any]] = []
-    for player, mime, data in references:
+    fallback_used = False
+    for player, mime, data, ref_kind in references:
+        if ref_kind != "turnaround":
+            fallback_used = True
         parts.append({"inlineData": {"mimeType": mime, "data": data}})
+
     world_style = game_state.settings.get("world_style", "High fantasy")
     directive_lines: List[str] = [
-        "Use the provided player portraits to keep each adventurer's appearance consistent across this scene.",
-        "Match faces, hair, and distinctive accessories from the references even if lighting or outfits change.",
+        "Use the attached character turnaround sheets (front, profile, and back views) to keep every adventurer perfectly consistent in this scene.",
+        "Follow the reference silhouettes, outfits, colors, and facial details exactly when rendering each character.",
         f"World style: {world_style}. Keep the setting aesthetics consistent.",
     ]
-    for player, _, _ in references:
+    if fallback_used:
+        directive_lines.append(
+            "If a turnaround sheet is missing for a character, rely on the fallback portrait reference but otherwise follow the turnarounds strictly."
+        )
+
+    prompt_text = (prompt or "").strip()
+
+    for player, _, _, ref_kind in references:
         descriptors: List[str] = []
         cls = (player.character_class or "").strip()
         background = (player.background or "").strip()
@@ -3778,12 +3874,12 @@ def _build_scene_image_parts(prompt: str) -> Optional[List[Dict[str, Any]]]:
         if status and status not in {"", "unknown"}:
             descriptors.append(f"mood: {status}")
         descriptor_text = ", ".join(descriptors)
+        ref_phrase = "turnaround sheet" if ref_kind == "turnaround" else "portrait reference"
         if descriptor_text:
-            directive_lines.append(f"{player.name}: match the portrait reference ({descriptor_text}).")
+            directive_lines.append(f"{player.name}: match the {ref_phrase} exactly ({descriptor_text}).")
         else:
-            directive_lines.append(f"{player.name}: match the portrait reference.")
+            directive_lines.append(f"{player.name}: match the {ref_phrase} exactly.")
 
-        # Inventory and conditions guide the depiction of equipment/props and visible state.
         inv_items = [item.strip() for item in (player.inventory or []) if isinstance(item, str) and item.strip()]
         if inv_items:
             directive_lines.append(
@@ -3794,12 +3890,51 @@ def _build_scene_image_parts(prompt: str) -> Optional[List[Dict[str, Any]]]:
             directive_lines.append(
                 f"{player.name}: reflect current conditions ({', '.join(cond_items)})."
             )
-    prompt_text = (prompt or "").strip()
+
     if prompt_text:
         directive_lines.extend(["", f"Scene prompt: {prompt_text}"])
     else:
         directive_lines.extend(["", "Scene prompt: (none provided)"])
+
     parts.append({"text": "\n".join(directive_lines)})
+    return parts
+
+
+def _build_turnaround_prompt_parts(
+    players: Iterable[Player],
+    prompt_text: str,
+    *,
+    prompt_label: str,
+) -> Optional[List[Dict[str, Any]]]:
+    players_list = list(players)
+    if not players_list:
+        return None
+    references = _collect_player_reference_sources(players_list)
+    if not references:
+        return None
+
+    parts: List[Dict[str, Any]] = []
+    fallback_used = any(kind != "turnaround" for _, _, _, kind in references)
+
+    lines: List[str] = [
+        "Use the attached character turnaround sheets (front, profile, and back views) as strict visual guides for anatomy, outfits, and colors.",
+    ]
+    if fallback_used:
+        lines.append(
+            "If a turnaround sheet is missing for a character, refer to the provided portrait reference only as a secondary fallback."
+        )
+
+    for player, _, _, ref_kind in references:
+        ref_phrase = "turnaround sheet" if ref_kind == "turnaround" else "portrait reference"
+        lines.append(f"{player.name}: replicate the {ref_phrase} precisely.")
+
+    cleaned_prompt = (prompt_text or "").strip()
+    label_text = cleaned_prompt if cleaned_prompt else "(none provided)"
+    lines.extend(["", f"{prompt_label}: {label_text}"])
+
+    for _player, mime, data, _ in references:
+        parts.append({"inlineData": {"mimeType": mime, "data": data}})
+    parts.append({"text": "\n".join(lines)})
     return parts
 
 
@@ -3809,6 +3944,7 @@ async def gemini_generate_image(
     *,
     purpose: str = "scene",
     turn_index: Optional[int] = None,
+    reference_players: Optional[Iterable[Player]] = None,
 ) -> str:
     """Returns a data URL (base64 image) from gemini-2.5-flash-image-preview."""
     api_key = require_gemini_api_key()
@@ -3816,7 +3952,11 @@ async def gemini_generate_image(
     prompt_text = prompt if isinstance(prompt, str) else str(prompt)
     request_parts: Optional[List[Dict[str, Any]]] = None
     if purpose == "scene":
-        request_parts = _build_scene_image_parts(prompt_text)
+        players_for_scene = reference_players if reference_players is not None else None
+        request_parts = _build_scene_image_parts(prompt_text, players_override=players_for_scene)
+    elif reference_players is not None:
+        label = f"{purpose.title()} prompt" if purpose else "Prompt"
+        request_parts = _build_turnaround_prompt_parts(reference_players, prompt_text, prompt_label=label)
     if not request_parts:
         request_parts = [{"text": prompt_text}]
     body = {
@@ -4010,7 +4150,9 @@ async def generate_scene_video(
         except ValueError:
             duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
         if is_static_framepack:
-            source_data_url = image_data_url or game_state.last_image_data_url
+            source_data_url = image_data_url
+            if not source_data_url and _scene_image_available_for_turn(turn_index):
+                source_data_url = game_state.last_image_data_url
             if not source_data_url:
                 raise HTTPException(
                     status_code=400,
@@ -4040,7 +4182,9 @@ async def generate_scene_video(
             )
             result_model = FRAMEPACK_MODEL_ID
     elif _is_parallax_model(normalized_model):
-        source_data_url = image_data_url or game_state.last_image_data_url
+        source_data_url = image_data_url
+        if not source_data_url and _scene_image_available_for_turn(turn_index):
+            source_data_url = game_state.last_image_data_url
         image_payload = _resolve_parallax_image(source_data_url)
         script_path = APP_DIR / "Animate" / "parallax.py"
         if not script_path.exists():
@@ -4536,6 +4680,52 @@ def build_portrait_prompt(player: Player) -> str:
         prompt += f" Convey a {tone_text}."
 
     return prompt
+
+
+def build_portrait_turnaround_prompt(player: Player, portrait_prompt: str) -> str:
+    """Prompt for a full-body turnaround reference sheet that matches the portrait styling."""
+    world_style = game_state.settings.get("world_style", "High fantasy")
+    descriptor_parts: List[str] = []
+    cls = player.character_class.strip() if player.character_class else ""
+    background = player.background.strip() if player.background else ""
+    if cls:
+        descriptor_parts.append(cls)
+    if background and background.lower() != cls.lower():
+        descriptor_parts.append(background)
+    descriptor_text = ", ".join(descriptor_parts) if descriptor_parts else "adventurer"
+
+    inv_items = [i.strip() for i in (player.inventory or []) if isinstance(i, str) and i.strip()]
+    cond_items = [c.strip() for c in (player.conditions or []) if isinstance(c, str) and c.strip()]
+    status_word = player.status_word.strip().lower() if player.status_word else ""
+
+    prompt_lines = [
+        f"Generate a character turnaround reference sheet for {player.name}, a {descriptor_text} in a {world_style} world.",
+        "Match the exact look, clothing, colors, and mood from this portrait description:",
+        portrait_prompt.strip(),
+        "Render four full-body views on a single clean sheet: front, left profile, right profile, and back view.",
+        "Keep the character standing neutrally with relaxed posture, neutral facial expression, and balanced lighting.",
+        "Maintain the same illustration style, level of detail, and palette as the portrait."
+    ]
+
+    if inv_items:
+        prompt_lines.append(
+            f"Include the same visible equipment or props where appropriate: {', '.join(inv_items[:6])}."
+        )
+    if cond_items:
+        prompt_lines.append(
+            f"Reflect any visually apparent conditions or effects: {', '.join(cond_items[:6])}."
+        )
+    if status_word and status_word not in {"", "unknown"}:
+        prompt_lines.append(f"Carry over the character's mood of {status_word} without changing the pose.")
+
+    prompt_lines.extend(
+        [
+            "Use a light, unobtrusive background with gentle ground shadows so silhouettes read clearly.",
+            "Avoid dramatic perspective, action poses, or extra scenery—this sheet is for consistent model reference.",
+        ]
+    )
+
+    return " ".join(prompt_lines)
 
 
 async def resolve_turn(initial: bool = False) -> None:
@@ -5160,6 +5350,7 @@ async def create_image(body: CreateImageBody) -> Dict[str, Any]:
             game_state.last_image_prompt,
             purpose="scene",
             turn_index=target_turn_index,
+            reference_players=game_state.players.values(),
         )
         _clear_scene_video()
         game_state.last_image_data_url = data_url
@@ -5206,8 +5397,10 @@ async def animate_scene(body: AnimateSceneBody) -> Dict[str, Any]:
             and game_state.last_image_data_url
         ):
             image_for_video = game_state.last_image_data_url
+        players_snapshot = list(game_state.players.values())
+        prompt_with_rollcall = _append_character_rollcall(prompt, players_snapshot)
         new_video = await generate_scene_video(
-            prompt,
+            prompt_with_rollcall,
             game_state.settings.get("video_model"),
             image_data_url=image_for_video,
             negative_prompt=negative_prompt,
@@ -5245,20 +5438,33 @@ async def create_portrait(body: CreatePortraitBody) -> Dict[str, Any]:
             raise HTTPException(status_code=409, detail="Another operation is in progress.")
         player = authenticate_player(body.player_id, body.token)
         portrait_prompt = build_portrait_prompt(player)
+        turnaround_prompt = build_portrait_turnaround_prompt(player, portrait_prompt)
         game_state.lock = LockState(active=True, reason="generating_portrait")
         await broadcast_public()
 
     try:
         img_model = game_state.settings.get("image_model") or "gemini-2.5-flash-image-preview"
-        data_url = await gemini_generate_image(
+        portrait_data_url = await gemini_generate_image(
             img_model,
             portrait_prompt,
             purpose="portrait",
+            reference_players=[player],
         )
+        turnaround_data_url = await gemini_generate_image(
+            img_model,
+            turnaround_prompt,
+            purpose="portrait_turnaround",
+        )
+        timestamp = time.time()
         player.portrait = PlayerPortrait(
-            data_url=data_url,
+            data_url=portrait_data_url,
             prompt=portrait_prompt,
-            updated_at=time.time(),
+            updated_at=timestamp,
+            turnaround=PortraitTurnaround(
+                data_url=turnaround_data_url,
+                prompt=turnaround_prompt,
+                updated_at=timestamp,
+            ),
         )
         await announce(f"{player.name}'s portrait updated.")
         await broadcast_public()
