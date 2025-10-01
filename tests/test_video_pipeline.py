@@ -661,6 +661,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             require_image_error: Optional[str] = None,
             use_image_as_end_frame: bool = False,
             end_frame_influence: Optional[float] = None,
+            model_variant_override: Optional[str] = None,
         ) -> None:
             captured.update(
                 prompt_text=prompt_text,
@@ -672,6 +673,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
                 require_image_error=require_image_error,
                 use_image_as_end_frame=use_image_as_end_frame,
                 end_frame_influence=end_frame_influence,
+                model_variant_override=model_variant_override,
             )
             output_path.write_bytes(b"static")
 
@@ -701,6 +703,7 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(captured["require_image"])
         self.assertTrue(captured["use_image_as_end_frame"])
         self.assertEqual(captured["end_frame_influence"], rpg.FRAMEPACK_STATIC_END_INFLUENCE)
+        self.assertEqual(captured["model_variant_override"], rpg.FRAMEPACK_STATIC_VARIANT)
 
     async def test_scene_video_generation_avoids_overwriting_files(self) -> None:
         class DummyOperation:

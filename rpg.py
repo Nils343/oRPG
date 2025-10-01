@@ -123,6 +123,7 @@ DEFAULT_TEXT_TEMPERATURE = 0.2
 DEFAULT_VIDEO_MODEL = "veo-3.0-generate-001"
 FRAMEPACK_MODEL_ID = "FramePack"
 FRAMEPACK_STATIC_MODEL_ID = "Static FramePack"
+FRAMEPACK_STATIC_VARIANT = "Original with Endframe"
 FRAMEPACK_STATIC_END_INFLUENCE = 0.8
 PARALLAX_MODEL_ID = "Parallax"
 PARALLAX_DEFAULT_LAYERS = 4
@@ -3798,6 +3799,7 @@ async def _generate_framepack_video(
     require_image_error: Optional[str] = None,
     use_image_as_end_frame: bool = False,
     end_frame_influence: Optional[float] = None,
+    model_variant_override: Optional[str] = None,
 ) -> None:
     module = _load_framepack_module()
     negative_value = (negative_prompt or "").strip()
@@ -3815,6 +3817,9 @@ async def _generate_framepack_video(
     model_variant = getattr(module, "FRAMEPACK_DEFAULT_VARIANT", FRAMEPACK_DEFAULT_VARIANT)
     if not isinstance(model_variant, str) or not model_variant:
         model_variant = FRAMEPACK_DEFAULT_VARIANT
+    override = (model_variant_override or "").strip()
+    if override:
+        model_variant = override
 
     resolved_image = _resolve_framepack_image(image_data_url)
     if require_image and resolved_image is None:
@@ -3941,6 +3946,11 @@ async def generate_scene_video(
             duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
         if is_static_framepack:
             source_data_url = image_data_url or game_state.last_image_data_url
+            if not source_data_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Static FramePack requires an existing image.",
+                )
             await _generate_framepack_video(
                 prompt_text,
                 output_path=output_path,
@@ -3952,6 +3962,7 @@ async def generate_scene_video(
                 require_image_error="Static FramePack requires an existing image.",
                 use_image_as_end_frame=True,
                 end_frame_influence=FRAMEPACK_STATIC_END_INFLUENCE,
+                model_variant_override=FRAMEPACK_STATIC_VARIANT,
             )
             result_model = FRAMEPACK_STATIC_MODEL_ID
         else:

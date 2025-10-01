@@ -1,4 +1,4 @@
-FramePack Studio API notes for creating animated clips via gradio_client (with or without a source image).
+FramePack Studio API quick reference for listing models and rendering clips with fixed start/end frames.
 
 Prerequisites
 1. Launch FramePack Studio locally (Pinokio shows the port, e.g. http://127.0.0.1:7860) and keep it running.
@@ -6,79 +6,57 @@ Prerequisites
 
 Connecting
 - from gradio_client import Client, handle_file
-- Client("http://127.0.0.1:7860", download_files="downloads")
+- client = Client("http://127.0.0.1:7860", download_files="downloads")
   * download_files is optional; when supplied, FramePack outputs are auto-downloaded into that directory.
-- client.view_api() prints all available endpoints. The ones relevant for image-to-video are /handle_start_button (submit job) and /monitor_job (poll job state).
 
-Submitting a job
-- /handle_start_button expects 28 positional arguments. The defaults discovered 2025-09-28 are:
-  selected_model="Original"
-  param_1 = start frame image (use handle_file("path/to.png") or None for prompt-only runs)
-  param_2 = video input (None for image-only)
-  param_3 = end frame image (None unless you want to blend toward an end frame)
-  param_4..param_28 = numeric or boolean settings (video length, steps, CFG, caching, resolution, etc.)
-- Any parameter you do not want to change can stay at the default; pass explicit values to keep argument order aligned.
-- Example call:
+Discovering available models
+- FramePack exposes the generation model selector as the first input of /handle_start_button. Use client.view_api(return_format="dict") to inspect it.
 
-result = client.predict(
-    "Original",                 # Generation Type
-    handle_file("test.png"),    # Start Frame (None -> generate from noise)
-    None,                        # Video Input
-    None,                        # End Frame
-    1.0,                         # End Frame Influence
-    "Gentle animation...",      # Prompt
-    "",                         # Negative Prompt
-    2500,                        # Seed
-    False,                       # Randomize
-    6,                           # Video length seconds
-    9,                           # Latent window size
-    25,                          # Steps
-    1.0,                         # CFG scale
-    10.0,                        # Distilled CFG scale
-    0.0,                         # CFG rescale
-    "MagCache",                 # Caching strategy
-    25,                          # TeaCache steps
-    0.15,                        # TeaCache rel_l1_thresh
-    0.1,                         # MagCache threshold
-    2,                           # MagCache max skips
-    0.25,                        # MagCache retention
-    4,                           # Blend sections
-    "Noise",                    # Latent image seed
-    True,                        # Clean up video files
-    [],                          # Select LoRAs to load
-    640,                         # Width
-    640,                         # Height
-    False,                       # Combine with source video
-    5,                           # Number of context frames
-    api_name="/handle_start_button"
-)
+from gradio_client import Client
 
-- The tuple returned places the job id in element 1 (index 1). Example: job_id = result[1]
+client = Client("http://127.0.0.1:7860")
+api_schema = client.view_api(return_format="dict")
+start_endpoint = api_schema["/handle_start_button"]
+model_selector = start_endpoint["inputs"][0]
+print(model_selector["label"], model_selector["choices"])
 
-Monitoring completion
-- Poll /monitor_job with the job id until status becomes "Completed".
+Typical choices currently returned are ["Original", "F1"]. When Studio updates, rerun the snippet to refresh the list.
+As of the latest schema dump, `/handle_start_button` reports these models:
+- Original
+- Original with Endframe
+- F1
+- Video
+- Video with Endframe
+- Video F1
 
-poll = client.predict(job_id, api_name="/monitor_job")
-status = poll[3]  # 'Completed' when done
+Pick `Original with Endframe` when you are supplying both start and end frames—the variant is configured to respect the end-frame blend pipeline.
 
-- Element 0 of the poll result contains a dict with the video path. With download_files set, that path points inside the chosen download directory. Without it, the path is the remote server temp path; you would need a manual HTTP GET or to re-instantiate Client with download_files before polling.
+Submitting a fixed-frame job
+- /handle_start_button expects positional arguments. The key entries for fixed frames are:
+  1. Generation Type (model name from the choices above)
+  2. Start Frame (handle_file path or None)
+  3. Video Input (None for image-driven runs)
+  4. End Frame (handle_file path or None)
+  5. End Frame Influence (float 0.0 - 1.0)
+- Keep remaining parameters aligned with the defaults FramePack reports. Explicitly pass values you care about to avoid positional drift.
 
-Retrieving the clip
-- When using download_files="downloads", the MP4 lands at downloads/<hash>/file=<remote_path>. Copy or move it to a friendly filename, e.g. shutil.copyfile(src, "framepack_output.mp4").
-
-Putting it together
+Example run with a fixed start frame and fixed end frame:
 
 from pathlib import Path
 from gradio_client import Client, handle_file
 
 client = Client("http://127.0.0.1:7860", download_files="downloads")
+model_name = "Original with Endframe"  # confirm via client.view_api()
+start_frame = handle_file("assets/start.png")
+end_frame = handle_file("assets/end.png")
+
 result = client.predict(
-    "Original",
-    None,  # omit image to start from latent noise
+    model_name,
+    start_frame,
     None,
-    None,
-    1.0,
-    "Gentle animation with subtle motion and depth cues",
+    end_frame,
+    1.0,                         # End Frame Influence (1.0 forces final frame to match)
+    "Describe the motion here",
     "",
     2500,
     False,
@@ -104,18 +82,35 @@ result = client.predict(
     5,
     api_name="/handle_start_button",
 )
+
 job_id = result[1]
+if not job_id:
+    raise RuntimeError("FramePack Studio did not return a job id")
+
+Notes on the fixed frames
+- Start Frame anchors the first rendered frame. Provide a clean still image that matches the target composition.
+- End Frame pulls the sequence toward the supplied still. Use End Frame Influence < 1.0 if you want the animation to approach but not exactly match the end frame.
+- Omit either frame by passing None to fall back to latent-only generation or start-only runs.
+
+Monitoring completion
+
+import time
 
 poll = client.predict(job_id, api_name="/monitor_job")
-status = poll[3]
-assert status == "Completed", status
-video_info = poll[0]
-local_path = Path(video_info["video"])
-out_file = Path("framepack_output.mp4")
-out_file.write_bytes(local_path.read_bytes())
-print(f"Saved animation to {out_file.resolve()}")
+status = str(poll[3]).lower()
+while "completed" not in status:
+    if "failed" in status or "error" in status:
+        raise RuntimeError(f"FramePack job {job_id} failed: {poll}")
+    time.sleep(5)
+    poll = client.predict(job_id, api_name="/monitor_job")
+    status = str(poll[3]).lower()
 
-Notes
-- Defaults may change between Studio releases; call client.view_api() to refresh parameter names and defaults.
-- Keep FramePack Studio running while polling; if the server restarts mid-job, the job id becomes invalid.
-- For longer clips, expect /monitor_job to take several minutes before returning "Completed".
+video_info = poll[0]
+
+Retrieving the clip
+- When using download_files="downloads", the MP4 lands in downloads/<hash>/file=<remote_path>. Copy or rename it for later use.
+- If auto-download is disabled or the file is missing, manually GET `<client.src>/file=<urllib.parse.quote(remote_path)>` (import quote via `from urllib.parse import quote`).
+
+Keep in mind
+- client.view_api() is your source of truth for parameter order and defaults; rerun it whenever FramePack Studio updates.
+- FramePack Studio must stay running until monitoring reports "Completed".
