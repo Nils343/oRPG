@@ -1305,9 +1305,55 @@ F11</span>
     "statsBack",
     "statsTextBack",
     "statsImageBack",
+    "statsVideoBack",
     "statsNarrationBack",
     "devInfoBack",
   ];
+
+  const modalStack = [];
+
+  function showModal(id) {
+    const el = $(id);
+    if (!el) return false;
+    const existingIndex = modalStack.indexOf(id);
+    if (existingIndex >= 0) {
+      modalStack.splice(existingIndex, 1);
+    }
+    modalStack.push(id);
+    el.style.display = 'flex';
+    syncJoinViewModalVisibility();
+    return true;
+  }
+
+  function hideModal(id) {
+    const el = $(id);
+    if (!el) return false;
+    el.style.display = 'none';
+    const existingIndex = modalStack.indexOf(id);
+    if (existingIndex >= 0) {
+      modalStack.splice(existingIndex, 1);
+    }
+    syncJoinViewModalVisibility();
+    return true;
+  }
+
+  function getTopModalId() {
+    for (let i = modalStack.length - 1; i >= 0; i -= 1) {
+      const id = modalStack[i];
+      const el = $(id);
+      if (isModalVisible(el)) {
+        return id;
+      }
+      modalStack.splice(i, 1);
+    }
+    for (let i = MODAL_IDS.length - 1; i >= 0; i -= 1) {
+      const id = MODAL_IDS[i];
+      if (isModalVisible($(id))) {
+        return id;
+      }
+    }
+    return null;
+  }
 
   const HIDDEN_JOIN_STATUS_KEYS = new Set([
     'join.status.requestSent',
@@ -1330,16 +1376,10 @@ F11</span>
   }
 
   function closeOpenModals() {
-    let closedAny = false;
-    for (const id of MODAL_IDS) {
-      const el = $(id);
-      if (isModalVisible(el)) {
-        el.style.display = "none";
-        closedAny = true;
-      }
-    }
-    syncJoinViewModalVisibility();
-    return closedAny;
+    const topId = getTopModalId();
+    if (!topId) return false;
+    hideModal(topId);
+    return true;
   }
 
   const joinModalHideState = {
@@ -4131,16 +4171,14 @@ F11</span>
           // Fallback placeholder remains visible
         }
       }
-      $("settingsBack").style.display = "flex";
-      syncJoinViewModalVisibility();
+      showModal('settingsBack');
     } finally {
       stopButtonCountdown('btnSettings');
     }
   }
   $("btnSettings").onclick = openSettings;
   $("btnCloseSettings").onclick = () => {
-    $("settingsBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('settingsBack');
   };
   bindVideoLengthControls();
   initializeWorldStylePicker();
@@ -4219,8 +4257,7 @@ F11</span>
     });
     if (!resp.ok) { alert(t('alerts.settingsSaveFailed')); return; }
     applyFxSaver(nextFxSaver, { persist: true });
-    $("settingsBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('settingsBack');
   };
 
   const languageSelect = $('languageSelect');
@@ -4326,8 +4363,7 @@ F11</span>
         if (!resp.ok) throw new Error('status');
         const data = await resp.json();
         renderDeveloperInfoModal(data || {});
-        devInfoModal.style.display = 'flex';
-        syncJoinViewModalVisibility();
+        showModal('devInfoBack');
       } catch (err) {
         alert(t('devInfo.fetchError'));
       }
@@ -4336,8 +4372,7 @@ F11</span>
   const btnCloseDevInfo = $("btnCloseDevInfo");
   if (btnCloseDevInfo && devInfoModal) {
     btnCloseDevInfo.addEventListener('click', () => {
-      devInfoModal.style.display = 'none';
-      syncJoinViewModalVisibility();
+      hideModal('devInfoBack');
     });
   }
 
@@ -4345,60 +4380,50 @@ F11</span>
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
-    $("statsBack").style.display = "flex";
-    syncJoinViewModalVisibility();
+    showModal('statsBack');
   };
   $("btnCloseStats").onclick = () => {
-    $("statsBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('statsBack');
   };
 
   $("btnStatsText").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
-    $("statsTextBack").style.display = "flex";
-    syncJoinViewModalVisibility();
+    showModal('statsTextBack');
   };
   $("btnCloseStatsText").onclick = () => {
-    $("statsTextBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('statsTextBack');
   };
 
   $("btnStatsImage").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
-    $("statsImageBack").style.display = "flex";
-    syncJoinViewModalVisibility();
+    showModal('statsImageBack');
   };
   $("btnCloseStatsImage").onclick = () => {
-    $("statsImageBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('statsImageBack');
   };
 
   $("btnStatsVideo").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
-    $("statsVideoBack").style.display = "flex";
-    syncJoinViewModalVisibility();
+    showModal('statsVideoBack');
   };
   $("btnCloseStatsVideo").onclick = () => {
-    $("statsVideoBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('statsVideoBack');
   };
 
   $("btnStatsNarration").onclick = () => {
     if (state.lastPublic) {
       updateStats(state.lastPublic.token_usage);
     }
-    $("statsNarrationBack").style.display = "flex";
-    syncJoinViewModalVisibility();
+    showModal('statsNarrationBack');
   };
   $("btnCloseStatsNarration").onclick = () => {
-    $("statsNarrationBack").style.display = "none";
-    syncJoinViewModalVisibility();
+    hideModal('statsNarrationBack');
   };
 
   const narrationButton = $("btnNarration");
