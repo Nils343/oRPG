@@ -231,8 +231,11 @@ def soft_slices(depth: np.ndarray, cuts: Sequence[float], sharp: float = 40.0) -
     if not cuts:
         return [np.ones_like(depth, dtype=np.float32)]
     boundaries = [1.0, *cuts, 0.0]
-    sigmoid = lambda x: 1.0 / (1.0 + np.exp(-sharp * x))
-    responses = [sigmoid(depth - b) for b in boundaries]
+
+    def _sigmoid(x: np.ndarray) -> np.ndarray:
+        return 1.0 / (1.0 + np.exp(-sharp * x))
+
+    responses = [_sigmoid(depth - b) for b in boundaries]
     layers = [
         np.clip(responses[i + 1] - responses[i], 0.0, 1.0).astype(np.float32)
         for i in range(len(boundaries) - 1)
@@ -273,7 +276,12 @@ def _max_reveal_radius(disp: np.ndarray, base_amp: float, frames: int = 120) -> 
     return int(np.clip(r, 3, 64))    # clamp to sane bounds
 
 
-def split_layers(rgb: np.ndarray, depth: np.ndarray, disp: np.ndarray, reveal_radius: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def split_layers(
+    rgb: np.ndarray,
+    depth: np.ndarray,
+    disp: np.ndarray,
+    reveal_radius: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     h, w = depth.shape
     near_mask = (depth > np.quantile(depth, 0.65)).astype(np.float32)
     near_mask = cv2.GaussianBlur(near_mask, (0, 0), 6.0)
@@ -475,7 +483,10 @@ def _encode_hevc_nvenc(src: Path, dst: Path) -> bool:
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except (OSError, subprocess.CalledProcessError) as exc:
-        stderr = exc.stderr.decode("utf-8", errors="ignore") if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        if isinstance(exc, subprocess.CalledProcessError):
+            stderr = exc.stderr.decode("utf-8", errors="ignore")
+        else:
+            stderr = str(exc)
         print(f"HEVC NVENC encode error: {stderr.strip()[:240]}")
         return False
     return True

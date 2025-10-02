@@ -20,10 +20,10 @@ import math
 import os
 import re
 import secrets
+import subprocess  # nosec B404
 import sys
 import tempfile
 import time
-import subprocess
 import unicodedata
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -2776,7 +2776,10 @@ async def schedule_auto_scene_video(
                 if _model_requires_reference_image(model_setting):
                     if not _scene_image_available_for_turn(turn_index):
                         print(
-                            "Auto video generation skipped: required scene image still unavailable after generation attempt.",
+                            (
+                                "Auto video generation skipped: required scene image still "
+                                "unavailable after generation attempt."
+                            ),
                             file=sys.stderr,
                             flush=True,
                         )
@@ -2785,19 +2788,23 @@ async def schedule_auto_scene_video(
                 elif _is_framepack_model(model_setting):
                     if _scene_image_available_for_turn(turn_index):
                         image_for_video = game_state.last_image_data_url
-                video_kwargs = {
-                    "negative_prompt": current_negative,
-                    "turn_index": turn_index,
-                }
-                if image_for_video is not None:
-                    video_kwargs["image_data_url"] = image_for_video
                 players_snapshot = list(game_state.players.values())
                 prompt_with_rollcall = _append_character_rollcall(current_prompt, players_snapshot)
-                new_video = await generate_scene_video(
-                    prompt_with_rollcall,
-                    model_setting,
-                    **video_kwargs,
-                )
+                if image_for_video is not None:
+                    new_video = await generate_scene_video(
+                        prompt_with_rollcall,
+                        model_setting,
+                        image_data_url=image_for_video,
+                        negative_prompt=current_negative,
+                        turn_index=turn_index,
+                    )
+                else:
+                    new_video = await generate_scene_video(
+                        prompt_with_rollcall,
+                        model_setting,
+                        negative_prompt=current_negative,
+                        turn_index=turn_index,
+                    )
                 _clear_scene_video()
                 game_state.scene_video = new_video
                 game_state.last_video_prompt = current_prompt
@@ -3851,13 +3858,22 @@ def _build_scene_image_parts(
 
     world_style = game_state.settings.get("world_style", "High fantasy")
     directive_lines: List[str] = [
-        "Use the attached character turnaround sheets (front, profile, and back views) to keep every adventurer perfectly consistent in this scene.",
-        "Follow the reference silhouettes, outfits, colors, and facial details exactly when rendering each character.",
+        (
+            "Use the attached character turnaround sheets (front, profile, and back views) "
+            "to keep every adventurer perfectly consistent in this scene."
+        ),
+        (
+            "Follow the reference silhouettes, outfits, colors, and facial details exactly "
+            "when rendering each character."
+        ),
         f"World style: {world_style}. Keep the setting aesthetics consistent.",
     ]
     if fallback_used:
         directive_lines.append(
-            "If a turnaround sheet is missing for a character, rely on the fallback portrait reference but otherwise follow the turnarounds strictly."
+            (
+                "If a turnaround sheet is missing for a character, rely on the fallback "
+                "portrait reference but otherwise follow the turnarounds strictly."
+            )
         )
 
     prompt_text = (prompt or "").strip()
@@ -3917,11 +3933,17 @@ def _build_turnaround_prompt_parts(
     fallback_used = any(kind != "turnaround" for _, _, _, kind in references)
 
     lines: List[str] = [
-        "Use the attached character turnaround sheets (front, profile, and back views) as strict visual guides for anatomy, outfits, and colors.",
+        (
+            "Use the attached character turnaround sheets (front, profile, and back views) "
+            "as strict visual guides for anatomy, outfits, and colors."
+        ),
     ]
     if fallback_used:
         lines.append(
-            "If a turnaround sheet is missing for a character, refer to the provided portrait reference only as a secondary fallback."
+            (
+                "If a turnaround sheet is missing for a character, refer to the provided "
+                "portrait reference only as a secondary fallback."
+            )
         )
 
     for player, _, _, ref_kind in references:
@@ -4173,10 +4195,14 @@ async def generate_scene_video(
             )
             result_model = FRAMEPACK_STATIC_MODEL_ID
         else:
+            source_data_url = image_data_url
+            if not source_data_url and _scene_image_available_for_turn(turn_index):
+                source_data_url = game_state.last_image_data_url
+
             await _generate_framepack_video(
                 prompt_text,
                 output_path=output_path,
-                image_data_url=image_data_url,
+                image_data_url=source_data_url,
                 negative_prompt=negative_text,
                 requested_duration=duration_setting,
             )
@@ -4196,11 +4222,11 @@ async def generate_scene_video(
             )
         except ValueError:
             duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
-        duration_seconds = float(duration_setting)
+        parallax_duration_seconds = float(duration_setting)
 
         device_preference = "cuda"
         try:  # torch is optional; fall back to CPU when unavailable
-            import torch  # type: ignore
+            import torch
         except Exception:  # pragma: no cover - optional dependency detection only
             device_preference = "cpu"
         else:  # pragma: no branch - simple availability check
@@ -4221,14 +4247,14 @@ async def generate_scene_video(
                     str(input_path),
                     str(temp_output),
                     "--seconds",
-                    str(duration_seconds),
+                    str(parallax_duration_seconds),
                     "--device",
                     device_preference,
                     "--layers",
                     str(PARALLAX_DEFAULT_LAYERS),
                 ]
 
-                completed = subprocess.run(
+                completed = subprocess.run(  # nosec B603
                     cmd,
                     check=False,
                     cwd=str(APP_DIR),
@@ -4699,7 +4725,10 @@ def build_portrait_turnaround_prompt(player: Player, portrait_prompt: str) -> st
     status_word = player.status_word.strip().lower() if player.status_word else ""
 
     prompt_lines = [
-        f"Generate a character turnaround reference sheet for {player.name}, a {descriptor_text} in a {world_style} world.",
+        (
+            f"Generate a character turnaround reference sheet for {player.name}, "
+            f"a {descriptor_text} in a {world_style} world."
+        ),
         "Match the exact look, clothing, colors, and mood from this portrait description:",
         portrait_prompt.strip(),
         "Render four full-body views on a single clean sheet: front, left profile, right profile, and back view.",

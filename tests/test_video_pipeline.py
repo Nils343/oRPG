@@ -552,6 +552,92 @@ class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
         usage_mock.assert_called_once_with(rpg.FRAMEPACK_MODEL_ID, seconds=3.5, turn_index=None)
         self.assertEqual(captured_duration, [42])
 
+    async def test_framepack_reuses_scene_image_when_none_supplied(self) -> None:
+        pixel = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            "AAAADUlEQVR4nGP4//8/AwAI/AL+F2ZF7QAAAABJRU5ErkJggg=="
+        )
+
+        captured: dict[str, Optional[str]] = {}
+
+        async def fake_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+            requested_duration: float,
+            **kwargs: Any,
+        ) -> None:
+            captured.update(image_data_url=image_data_url, prompt_text=prompt_text)
+            output_path.write_bytes(b"mp4data")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            rpg.game_state.last_image_data_url = pixel
+            rpg.game_state.last_scene_image_turn_index = 5
+            rpg.game_state.last_image_kind = "scene"
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_framepack),
+                mock.patch("rpg.record_video_usage") as usage_mock,
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=2.0),
+                mock.patch("rpg.time.time", side_effect=[1000.0, 1001.0]),
+            ):
+                video = await rpg.generate_scene_video(
+                    "Animate",
+                    model=rpg.FRAMEPACK_MODEL_ID,
+                    turn_index=5,
+                )
+
+        self.assertEqual(video.model, rpg.FRAMEPACK_MODEL_ID)
+        self.assertEqual(captured.get("image_data_url"), pixel)
+        self.assertEqual(captured.get("prompt_text"), "Animate")
+        usage_mock.assert_called_once_with(rpg.FRAMEPACK_MODEL_ID, seconds=2.0, turn_index=5)
+
+    async def test_framepack_ignores_prior_turn_scene_image(self) -> None:
+        pixel = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            "AAAADUlEQVR4nGP4//8/AwAI/AL+F2ZF7QAAAABJRU5ErkJggg=="
+        )
+
+        captured: dict[str, Optional[str]] = {}
+
+        async def fake_framepack(
+            prompt_text: str,
+            *,
+            output_path: Path,
+            image_data_url: Optional[str],
+            negative_prompt: Optional[str],
+            requested_duration: float,
+            **kwargs: Any,
+        ) -> None:
+            captured.update(image_data_url=image_data_url, prompt_text=prompt_text)
+            output_path.write_bytes(b"mp4data")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            media_dir = Path(tmp_dir)
+            rpg.game_state.last_image_data_url = pixel
+            rpg.game_state.last_scene_image_turn_index = 4
+            rpg.game_state.last_image_kind = "scene"
+            with (
+                mock.patch.object(rpg, "GENERATED_MEDIA_DIR", media_dir),
+                mock.patch("rpg._generate_framepack_video", new=fake_framepack),
+                mock.patch("rpg.record_video_usage") as usage_mock,
+                mock.patch("rpg._probe_mp4_duration_seconds", return_value=2.5),
+                mock.patch("rpg.time.time", side_effect=[1000.0, 1001.0]),
+            ):
+                video = await rpg.generate_scene_video(
+                    "Animate",
+                    model=rpg.FRAMEPACK_MODEL_ID,
+                    turn_index=5,
+                )
+
+        self.assertEqual(video.model, rpg.FRAMEPACK_MODEL_ID)
+        self.assertIsNone(captured.get("image_data_url"))
+        self.assertEqual(captured.get("prompt_text"), "Animate")
+        usage_mock.assert_called_once_with(rpg.FRAMEPACK_MODEL_ID, seconds=2.5, turn_index=5)
+
     async def test_framepack_path_skips_genai_dependency(self) -> None:
         async def fake_framepack(
             prompt_text: str,

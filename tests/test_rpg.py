@@ -1610,10 +1610,18 @@ class MaybeQueueSceneVideoTests(unittest.IsolatedAsyncioTestCase):
             file_path=str(rpg.GENERATED_MEDIA_DIR / "static.mp4"),
         )
 
-        with mock.patch("rpg.broadcast_public", new=mock.AsyncMock()), \
-                mock.patch("rpg.announce", new=mock.AsyncMock()), \
-                mock.patch("rpg._generate_scene_image_for_auto", new=mock.AsyncMock(side_effect=fake_scene)) as image_mock, \
-                mock.patch("rpg.generate_scene_video", new=mock.AsyncMock(return_value=fake_video)) as video_mock:
+        with (
+            mock.patch("rpg.broadcast_public", new=mock.AsyncMock()),
+            mock.patch("rpg.announce", new=mock.AsyncMock()),
+            mock.patch(
+                "rpg._generate_scene_image_for_auto",
+                new=mock.AsyncMock(side_effect=fake_scene),
+            ) as image_mock,
+            mock.patch(
+                "rpg.generate_scene_video",
+                new=mock.AsyncMock(return_value=fake_video),
+            ) as video_mock,
+        ):
             await rpg.schedule_auto_scene_video("Arcane camera sweep", requested_turn)
             await asyncio.sleep(0)
             await asyncio.sleep(0)
@@ -3419,11 +3427,16 @@ class CreatePortraitTests(unittest.IsolatedAsyncioTestCase):
         portrait_data = "data:image/png;base64," + base64.b64encode(b"portrait").decode("ascii")
         turnaround_data = "data:image/png;base64," + base64.b64encode(b"turnaround").decode("ascii")
 
-        with mock.patch("rpg.broadcast_public", new=mock.AsyncMock()) as broadcast, \
-                mock.patch("rpg.announce", new=mock.AsyncMock()) as announce, \
-                mock.patch("rpg.send_private", new=mock.AsyncMock()) as send_private, \
-                mock.patch("rpg.gemini_generate_image", new=mock.AsyncMock(side_effect=[portrait_data, turnaround_data])) as gen, \
-                mock.patch("rpg.time.time", return_value=123.0):
+        with (
+            mock.patch("rpg.broadcast_public", new=mock.AsyncMock()) as broadcast,
+            mock.patch("rpg.announce", new=mock.AsyncMock()) as announce,
+            mock.patch("rpg.send_private", new=mock.AsyncMock()) as send_private,
+            mock.patch(
+                "rpg.gemini_generate_image",
+                new=mock.AsyncMock(side_effect=[portrait_data, turnaround_data]),
+            ) as gen,
+            mock.patch("rpg.time.time", return_value=123.0),
+        ):
             body = rpg.CreatePortraitBody(player_id="p1", token="tok-portrait")
             result = await rpg.create_portrait(body)
 
