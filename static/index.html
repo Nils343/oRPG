@@ -162,6 +162,10 @@
   .modal { width:min(720px, 92vw); background: var(--card); border:1px solid #2a3142; border-radius:12px; padding:16px; }
   .modal h3 { margin-top:0; }
   .modal.dev-info-modal { width:calc(100vw - 24px); max-width:calc(100vw - 24px); height:calc(100vh - 24px); max-height:calc(100vh - 24px); display:flex; flex-direction:column; padding:20px; overflow:hidden; }
+  .dev-info-tabs { display:flex; gap:8px; margin:12px 0 16px; flex-wrap:wrap; }
+  .dev-info-tab { border:1px solid rgba(122,162,247,0.25); background:rgba(18,22,32,0.9); color:var(--muted); border-radius:999px; padding:6px 14px; font-size:13px; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; transition:all .15s ease; }
+  .dev-info-tab:hover { color:var(--fg); border-color:rgba(122,162,247,0.45); background:rgba(20,24,34,0.95); }
+  .dev-info-tab.active { background:rgba(122,162,247,0.22); color:var(--fg); border-color:rgba(122,162,247,0.7); box-shadow:0 10px 24px rgba(122,162,247,0.28); }
   .dev-info-grid { display:flex; flex-direction:row; gap:16px; flex:1 1 auto; flex-wrap:nowrap; align-items:stretch; min-height:0; width:100%; }
   .dev-info-section { background:rgba(18,22,32,0.95); border:1px solid #1f2534; border-radius:10px; padding:12px; flex:1 1 0%; min-width:320px; min-width:0; display:flex; flex-direction:column; min-height:0; height:100%; overflow:hidden; }
   .dev-info-section h4 { margin:0 0 8px; font-size:14px; letter-spacing:0.04em; text-transform:uppercase; color:var(--muted); }
@@ -664,7 +668,13 @@ F11</span>
 
 <div id="devInfoBack" class="modalBack">
   <div class="modal dev-info-modal">
-    <h3 data-i18n="devInfo.title">Text API exchange</h3>
+    <h3 id="devInfoTitle" data-i18n="devInfo.titleText">Text Model API exchange</h3>
+    <div class="dev-info-tabs">
+      <button id="devInfoTabText" class="dev-info-tab active" type="button" data-kind="text" data-i18n="devInfo.tabText" aria-pressed="true">Text Model</button>
+      <button id="devInfoTabImage" class="dev-info-tab" type="button" data-kind="image" data-i18n="devInfo.tabImage" aria-pressed="false">Image Model</button>
+      <button id="devInfoTabVideo" class="dev-info-tab" type="button" data-kind="video" data-i18n="devInfo.tabVideo" aria-pressed="false">Video Model</button>
+      <button id="devInfoTabNarration" class="dev-info-tab" type="button" data-kind="narration" data-i18n="devInfo.tabNarration" aria-pressed="false">Narration Model</button>
+    </div>
     <div class="dev-info-grid">
       <section class="dev-info-section">
         <h4 data-i18n="devInfo.request">Last request</h4>
@@ -675,7 +685,7 @@ F11</span>
         <pre id="devInfoResponse" class="dev-info-pre"></pre>
       </section>
     </div>
-    <div class="tip" data-i18n="devInfo.tip">Shows the most recent payload sent to the text model and the raw response it returned.</div>
+    <div id="devInfoTip" class="tip" data-i18n="devInfo.tipText">Shows the most recent payload sent to the text model and the raw response it returned.</div>
     <div class="row" style="margin-top:12px">
         <button id="btnCloseDevInfo" class="right" data-i18n="stats.shared.close">Close</button>
     </div>
@@ -1758,6 +1768,18 @@ F11</span>
     "devInfo.summaryResponseHeading": { en: "Summary response", de: "Zusammenfassungs-Antwort" },
     "devInfo.turnRequestHeading": { en: "Turn request", de: "Rundenanfrage" },
     "devInfo.turnResponseHeading": { en: "Turn response", de: "Rundenantwort" },
+    "devInfo.tabText": { en: "Text Model", de: "Textmodell" },
+    "devInfo.tabImage": { en: "Image Model", de: "Bildmodell" },
+    "devInfo.tabVideo": { en: "Video Model", de: "Videomodell" },
+    "devInfo.tabNarration": { en: "Narration Model", de: "Erzählmodell" },
+    "devInfo.titleText": { en: "Text Model API exchange", de: "Textmodell-API-Austausch" },
+    "devInfo.titleImage": { en: "Image Model API exchange", de: "Bildmodell-API-Austausch" },
+    "devInfo.titleVideo": { en: "Video Model API exchange", de: "Videomodell-API-Austausch" },
+    "devInfo.titleNarration": { en: "Narration Model API exchange", de: "Erzählmodell-API-Austausch" },
+    "devInfo.tipText": { en: "Shows the most recent payload sent to the text model and everything it returned.", de: "Zeigt die zuletzt an das Textmodell gesendeten Daten sowie die komplette Antwort." },
+    "devInfo.tipImage": { en: "Shows the latest request to the image model along with its raw response.", de: "Zeigt die letzte Anfrage an das Bildmodell und dessen unveränderte Antwort." },
+    "devInfo.tipVideo": { en: "Shows the latest scene animation request and how the video generator responded.", de: "Zeigt die letzte Anfrage an den Videogenerator sowie dessen Antwort." },
+    "devInfo.tipNarration": { en: "Shows the most recent narration (text-to-speech) call and the metadata ElevenLabs returned.", de: "Zeigt die letzte Erzähl- (Text-zu-Sprache-) Anfrage und die von ElevenLabs gelieferten Metadaten." },
     "devInfo.tip": { en: "Shows the most recent payload sent to the text model and everything it returned.", de: "Zeigt die zuletzt an das Textmodell gesendeten Daten sowie die komplette Antwort." },
     "devInfo.title": { en: "Text API exchange", de: "Text-API-Austausch" },
     "header.devInfo": { en: "Developer info", de: "Entwicklerinfo" },
@@ -4330,9 +4352,75 @@ F11</span>
     return null;
   }
 
-  function renderDeveloperInfoModal(payload) {
-    const historyMode = String(((payload && payload.history_mode) || 'full')).toLowerCase();
-    const includeTurnDetail = historyMode === 'summary';
+  const DEV_INFO_CONFIG = {
+    text: {
+      endpoint: '/api/dev/text_inspect',
+      titleKey: 'devInfo.titleText',
+      tipKey: 'devInfo.tipText',
+      includeTurnDetail: true,
+      useJsonExtractor: true,
+      buttonId: 'devInfoTabText',
+    },
+    image: {
+      endpoint: '/api/dev/image_inspect',
+      titleKey: 'devInfo.titleImage',
+      tipKey: 'devInfo.tipImage',
+      includeTurnDetail: false,
+      useJsonExtractor: false,
+      buttonId: 'devInfoTabImage',
+    },
+    video: {
+      endpoint: '/api/dev/video_inspect',
+      titleKey: 'devInfo.titleVideo',
+      tipKey: 'devInfo.tipVideo',
+      includeTurnDetail: false,
+      useJsonExtractor: false,
+      buttonId: 'devInfoTabVideo',
+    },
+    narration: {
+      endpoint: '/api/dev/narration_inspect',
+      titleKey: 'devInfo.titleNarration',
+      tipKey: 'devInfo.tipNarration',
+      includeTurnDetail: false,
+      useJsonExtractor: false,
+      buttonId: 'devInfoTabNarration',
+    },
+  };
+  const devInfoState = {
+    activeKind: 'text',
+    cache: {},
+  };
+
+  function isDevPayloadMeaningful(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    const hasKeys = (value) => {
+      if (!value || typeof value !== 'object') return false;
+      if (Array.isArray(value)) return value.length > 0;
+      return Object.keys(value).length > 0;
+    };
+    if (hasKeys(payload.request)) return true;
+    if (hasKeys(payload.response)) return true;
+    if (hasKeys(payload.turn_request)) return true;
+    if (hasKeys(payload.turn_response)) return true;
+    return false;
+  }
+
+  function renderDeveloperInfoModal(payload, config) {
+    const titleEl = $("devInfoTitle");
+    if (titleEl && config?.titleKey) {
+      titleEl.textContent = t(config.titleKey);
+    }
+    const tipEl = $("devInfoTip");
+    if (tipEl && config?.tipKey) {
+      tipEl.textContent = t(config.tipKey);
+    }
+
+    const includeTurnDetail = Boolean(config?.includeTurnDetail) && String(((payload && payload.history_mode) || 'full')).toLowerCase() === 'summary';
+
+    const primaryRequest = payload && payload.request;
+    const turnRequest = includeTurnDetail ? payload && payload.turn_request : null;
+    const primaryResponse = config?.useJsonExtractor ? extractResponseJson(payload && payload.response) : payload && payload.response;
+    const turnResponse = includeTurnDetail ? extractResponseJson(payload && payload.turn_response) : null;
 
     const assignBlock = (
       element,
@@ -4374,36 +4462,83 @@ F11</span>
 
     assignBlock(
       $("devInfoRequest"),
-      payload && payload.request,
-      payload && payload.turn_request,
+      primaryRequest,
+      turnRequest,
       includeTurnDetail ? 'devInfo.summaryRequestHeading' : null,
       includeTurnDetail ? 'devInfo.turnRequestHeading' : null
     );
 
     assignBlock(
       $("devInfoResponse"),
-      extractResponseJson(payload && payload.response),
-      extractResponseJson(payload && payload.turn_response),
+      primaryResponse,
+      turnResponse,
       includeTurnDetail ? 'devInfo.summaryResponseHeading' : null,
       includeTurnDetail ? 'devInfo.turnResponseHeading' : null
     );
   }
 
+  function setActiveDevInfoButton(kind) {
+    Object.entries(DEV_INFO_CONFIG).forEach(([entryKind, cfg]) => {
+      const btn = $(cfg.buttonId);
+      if (!btn) return;
+      const isActive = entryKind === kind;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  async function switchDevInfoKind(kind, options = {}) {
+    const config = DEV_INFO_CONFIG[kind];
+    if (!config) return;
+    const { forceRefresh = false } = options;
+    const previousKind = devInfoState.activeKind;
+    devInfoState.activeKind = kind;
+    setActiveDevInfoButton(kind);
+
+    const cached = devInfoState.cache[kind];
+    if (cached && !forceRefresh && isDevPayloadMeaningful(cached)) {
+      renderDeveloperInfoModal(cached, config);
+      return;
+    }
+
+    try {
+      const resp = await fetch(config.endpoint);
+      if (!resp.ok) throw new Error('status');
+      const data = await resp.json();
+      const payload = data || {};
+      if (isDevPayloadMeaningful(payload)) {
+        devInfoState.cache[kind] = payload;
+      } else {
+        delete devInfoState.cache[kind];
+      }
+      renderDeveloperInfoModal(payload, config);
+    } catch (err) {
+      const message = err && err.message ? err.message : err;
+      console.error('Developer info fetch failed:', message);
+      if (devInfoState.cache[previousKind]) {
+        devInfoState.activeKind = previousKind;
+        setActiveDevInfoButton(previousKind);
+        renderDeveloperInfoModal(devInfoState.cache[previousKind], DEV_INFO_CONFIG[previousKind]);
+      }
+      alert(t('devInfo.fetchError'));
+    }
+  }
+
   const devInfoModal = $("devInfoBack");
   const btnDevInfo = $("btnDevInfo");
   if (btnDevInfo && devInfoModal) {
-    btnDevInfo.addEventListener('click', async () => {
-      try {
-        const resp = await fetch('/api/dev/text_inspect');
-        if (!resp.ok) throw new Error('status');
-        const data = await resp.json();
-        renderDeveloperInfoModal(data || {});
-        showModal('devInfoBack');
-      } catch (err) {
-        alert(t('devInfo.fetchError'));
-      }
+    btnDevInfo.addEventListener('click', () => {
+      showModal('devInfoBack');
+      switchDevInfoKind('text', { forceRefresh: true });
     });
   }
+  Object.entries(DEV_INFO_CONFIG).forEach(([kind, cfg]) => {
+    const btn = $(cfg.buttonId);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      switchDevInfoKind(kind);
+    });
+  });
   const btnCloseDevInfo = $("btnCloseDevInfo");
   if (btnCloseDevInfo && devInfoModal) {
     btnCloseDevInfo.addEventListener('click', () => {

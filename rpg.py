@@ -1607,6 +1607,12 @@ class GameState:
     last_text_response: Dict[str, Any] = field(default_factory=dict)
     last_turn_request: Dict[str, Any] = field(default_factory=dict)
     last_turn_response: Dict[str, Any] = field(default_factory=dict)
+    last_image_request: Dict[str, Any] = field(default_factory=dict)
+    last_image_response: Dict[str, Any] = field(default_factory=dict)
+    last_video_request: Dict[str, Any] = field(default_factory=dict)
+    last_video_response: Dict[str, Any] = field(default_factory=dict)
+    last_narration_request: Dict[str, Any] = field(default_factory=dict)
+    last_narration_response: Dict[str, Any] = field(default_factory=dict)
 
     def public_snapshot(self) -> Dict:
         """Sanitized state for all players."""
@@ -2310,6 +2316,16 @@ def _elevenlabs_convert_to_base64(
     resolved_model = (model_id or ELEVENLABS_MODEL_ID or "").strip() or None
     audio_bytes = b""
     response_headers: Dict[str, str] = {}
+    request_snapshot = {
+        "timestamp": time.time(),
+        "base_url": ELEVENLABS_BASE_URL,
+        "model_id": resolved_model or ELEVENLABS_MODEL_ID,
+        "voice_id": ELEVENLABS_VOICE_ID,
+        "text_length": len(text),
+        "text_preview": text[:280],
+        "voice_settings": voice_kwargs,
+    }
+    response_snapshot: Dict[str, Any] = {}
     try:
         voice_settings = VoiceSettings(**voice_kwargs) if voice_kwargs else None
         client = ElevenLabs(api_key=api_key, base_url=ELEVENLABS_BASE_URL)
@@ -2345,11 +2361,21 @@ def _elevenlabs_convert_to_base64(
             file=sys.stderr,
             flush=True,
         )
+        response_snapshot = {
+            "status": "error",
+            "detail": details or str(exc),
+        }
+        _record_dev_inspect("narration", request_snapshot, response_snapshot)
         raise ElevenLabsNarrationError(details or "ElevenLabs narration failed.") from exc
 
     if not audio_bytes:
         message = "ElevenLabs returned no audio data for the narration request."
         print(message, file=sys.stderr, flush=True)
+        response_snapshot = {
+            "status": "error",
+            "detail": message,
+        }
+        _record_dev_inspect("narration", request_snapshot, response_snapshot)
         raise ElevenLabsNarrationError(message)
 
     normalized_headers = {
@@ -2450,6 +2476,15 @@ def _elevenlabs_convert_to_base64(
         "subscription_remaining_credits": remaining_credits,
         "subscription_next_reset_unix": subscription_next_reset,
     }
+
+    response_snapshot = {
+        "status": "ok",
+        "headers": {k: normalized_headers[k] for k in sorted(normalized_headers)},
+        "audio_bytes": len(audio_bytes),
+        "metadata": metadata,
+    }
+
+    _record_dev_inspect("narration", request_snapshot, response_snapshot)
 
     return {
         "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
@@ -3054,6 +3089,34 @@ def _sanitize_request_headers(headers: Dict[str, str]) -> Dict[str, str]:
         else:
             sanitized[key] = value
     return sanitized
+
+
+_DEV_SNAPSHOT_ATTRS: Dict[str, Tuple[str, str]] = {
+    "image": ("last_image_request", "last_image_response"),
+    "video": ("last_video_request", "last_video_response"),
+    "narration": ("last_narration_request", "last_narration_response"),
+}
+
+
+def _record_dev_inspect(
+    kind: str,
+    request_snapshot: Optional[Dict[str, Any]],
+    response_snapshot: Optional[Dict[str, Any]],
+) -> None:
+    attrs = _DEV_SNAPSHOT_ATTRS.get(kind)
+    if not attrs:
+        return
+
+    def _safe_copy(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if isinstance(payload, dict):
+            try:
+                return copy.deepcopy(payload)
+            except Exception:  # pragma: no cover - extremely defensive
+                return dict(payload)
+        return {}
+
+    setattr(game_state, attrs[0], _safe_copy(request_snapshot))
+    setattr(game_state, attrs[1], _safe_copy(response_snapshot))
 
 
 async def _post_structured_request(
@@ -3987,11 +4050,55 @@ async def gemini_generate_image(
         ]
     }
     headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=180) as client:
-        r = await client.post(url, headers=headers, json=body)
-        if r.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"Image generation failed: {r.text}")
-        data = r.json()
+    request_snapshot = {
+        "timestamp": time.time(),
+        "url": url,
+        "model": model,
+        "purpose": purpose,
+        "headers": _sanitize_request_headers(headers),
+        "body": copy.deepcopy(body),
+    }
+    response_snapshot: Dict[str, Any] = {}
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            r = await client.post(url, headers=headers, json=body)
+    except Exception as exc:  # pragma: no cover - network failure handled upstream
+        response_snapshot = {
+            "timestamp": time.time(),
+            "error": repr(exc),
+        }
+        _record_dev_inspect("image", request_snapshot, response_snapshot)
+        raise
+
+    raw_text = getattr(r, "text", "")
+    if callable(raw_text):
+        try:
+            raw_text = raw_text()
+        except Exception:
+            raw_text = ""
+    if raw_text is None:
+        raw_text = ""
+    headers_source = getattr(r, "headers", {}) or {}
+    header_items = headers_source.items() if hasattr(headers_source, "items") else []
+    response_headers = {str(k): str(v) for k, v in header_items}
+    response_snapshot = {
+        "timestamp": time.time(),
+        "status_code": r.status_code,
+        "headers": response_headers,
+        "text": raw_text,
+    }
+    try:
+        response_json = r.json()
+    except Exception:
+        response_json = None
+    if response_json is not None:
+        response_snapshot["json"] = response_json
+
+    if r.status_code != 200:
+        _record_dev_inspect("image", request_snapshot, response_snapshot)
+        raise HTTPException(status_code=502, detail=f"Image generation failed: {raw_text}")
+
+    data = response_json if isinstance(response_json, dict) else {}
 
     # Extract first inline image part
     response_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
@@ -4009,8 +4116,15 @@ async def gemini_generate_image(
                     _archive_generated_media(image_bytes, prefix=prefix, suffix=suffix)
                 except Exception:  # noqa: BLE001  # nosec B110
                     pass
+            response_snapshot["selected_inline"] = {
+                "mime": mime,
+                "length": len(b64),
+            }
+            _record_dev_inspect("image", request_snapshot, response_snapshot)
             return f"data:{mime};base64,{b64}"
     # Some generations also include text; if no image found, raise
+    response_snapshot["error"] = "No inline image returned"
+    _record_dev_inspect("image", request_snapshot, response_snapshot)
     raise HTTPException(status_code=502, detail="No image data returned by model.")
 
 
@@ -4162,182 +4276,279 @@ async def generate_scene_video(
     output_path = GENERATED_MEDIA_DIR / filename
     output_path = _unique_media_path(output_path)
     result_model = normalized_model
+    video_dev_request: Dict[str, Any] = {}
+    video_dev_response: Dict[str, Any] = {}
 
-    if _is_framepack_model(normalized_model) or _is_framepack_static_model(normalized_model):
-        is_static_framepack = _is_framepack_static_model(normalized_model)
-        try:
-            duration_setting = _normalize_video_duration_seconds(
-                game_state.settings.get("video_duration_seconds")
-            )
-        except ValueError:
-            duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
-        if is_static_framepack:
-            source_data_url = image_data_url
-            if not source_data_url and _scene_image_available_for_turn(turn_index):
-                source_data_url = game_state.last_image_data_url
-            if not source_data_url:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Static FramePack requires an existing image.",
+    try:
+        if _is_framepack_model(normalized_model) or _is_framepack_static_model(normalized_model):
+            is_static_framepack = _is_framepack_static_model(normalized_model)
+            try:
+                duration_setting = _normalize_video_duration_seconds(
+                    game_state.settings.get("video_duration_seconds")
                 )
-            await _generate_framepack_video(
-                prompt_text,
-                output_path=output_path,
-                image_data_url=source_data_url,
-                negative_prompt=negative_text,
-                requested_duration=duration_setting,
-                prompt_override="",
-                require_image=True,
-                require_image_error="Static FramePack requires an existing image.",
-                use_image_as_end_frame=True,
-                end_frame_influence=FRAMEPACK_STATIC_END_INFLUENCE,
-                model_variant_override=FRAMEPACK_STATIC_VARIANT,
-            )
-            result_model = FRAMEPACK_STATIC_MODEL_ID
-        else:
+            except ValueError:
+                duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
+            if is_static_framepack:
+                source_data_url = image_data_url
+                if not source_data_url and _scene_image_available_for_turn(turn_index):
+                    source_data_url = game_state.last_image_data_url
+                video_dev_request = {
+                    "provider": "framepack",
+                    "variant": "static",
+                    "model": normalized_model,
+                    "prompt": prompt_text,
+                    "duration_seconds": duration_setting,
+                    "negative_prompt": negative_text or None,
+                    "image_was_supplied": bool(image_data_url),
+                    "image_resolved": bool(source_data_url),
+                }
+                if not source_data_url:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Static FramePack requires an existing image.",
+                    )
+                await _generate_framepack_video(
+                    prompt_text,
+                    output_path=output_path,
+                    image_data_url=source_data_url,
+                    negative_prompt=negative_text,
+                    requested_duration=duration_setting,
+                    prompt_override="",
+                    require_image=True,
+                    require_image_error="Static FramePack requires an existing image.",
+                    use_image_as_end_frame=True,
+                    end_frame_influence=FRAMEPACK_STATIC_END_INFLUENCE,
+                    model_variant_override=FRAMEPACK_STATIC_VARIANT,
+                )
+                video_dev_response = {
+                    "status": "ok",
+                    "provider": "framepack",
+                    "variant": "static",
+                    "output_path": str(output_path),
+                    "duration_seconds": duration_setting,
+                }
+                result_model = FRAMEPACK_STATIC_MODEL_ID
+            else:
+                source_data_url = image_data_url
+                if not source_data_url and _scene_image_available_for_turn(turn_index):
+                    source_data_url = game_state.last_image_data_url
+                video_dev_request = {
+                    "provider": "framepack",
+                    "variant": "dynamic",
+                    "model": normalized_model,
+                    "prompt": prompt_text,
+                    "duration_seconds": duration_setting,
+                    "negative_prompt": negative_text or None,
+                    "image_was_supplied": bool(image_data_url),
+                    "image_resolved": bool(source_data_url),
+                }
+                await _generate_framepack_video(
+                    prompt_text,
+                    output_path=output_path,
+                    image_data_url=source_data_url,
+                    negative_prompt=negative_text,
+                    requested_duration=duration_setting,
+                )
+                video_dev_response = {
+                    "status": "ok",
+                    "provider": "framepack",
+                    "variant": "dynamic",
+                    "output_path": str(output_path),
+                    "duration_seconds": duration_setting,
+                }
+                result_model = FRAMEPACK_MODEL_ID
+        elif _is_parallax_model(normalized_model):
             source_data_url = image_data_url
             if not source_data_url and _scene_image_available_for_turn(turn_index):
                 source_data_url = game_state.last_image_data_url
+            image_payload = _resolve_parallax_image(source_data_url)
+            script_path = APP_DIR / "Animate" / "parallax.py"
+            if not script_path.exists():
+                raise HTTPException(status_code=500, detail="Parallax animator is unavailable on the server.")
 
-            await _generate_framepack_video(
-                prompt_text,
-                output_path=output_path,
-                image_data_url=source_data_url,
-                negative_prompt=negative_text,
-                requested_duration=duration_setting,
-            )
-            result_model = FRAMEPACK_MODEL_ID
-    elif _is_parallax_model(normalized_model):
-        source_data_url = image_data_url
-        if not source_data_url and _scene_image_available_for_turn(turn_index):
-            source_data_url = game_state.last_image_data_url
-        image_payload = _resolve_parallax_image(source_data_url)
-        script_path = APP_DIR / "Animate" / "parallax.py"
-        if not script_path.exists():
-            raise HTTPException(status_code=500, detail="Parallax animator is unavailable on the server.")
+            try:
+                duration_setting = _normalize_video_duration_seconds(
+                    game_state.settings.get("video_duration_seconds")
+                )
+            except ValueError:
+                duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
+            parallax_duration_seconds = float(duration_setting)
 
-        try:
-            duration_setting = _normalize_video_duration_seconds(
-                game_state.settings.get("video_duration_seconds")
-            )
-        except ValueError:
-            duration_setting = int(FRAMEPACK_DEFAULT_DURATION_SECONDS)
-        parallax_duration_seconds = float(duration_setting)
-
-        device_preference = "cuda"
-        try:  # torch is optional; fall back to CPU when unavailable
-            import torch
-        except Exception:  # pragma: no cover - optional dependency detection only
-            device_preference = "cpu"
-        else:  # pragma: no branch - simple availability check
-            if not torch.cuda.is_available():
+            device_preference = "cuda"
+            try:  # torch is optional; fall back to CPU when unavailable
+                import torch
+            except Exception:  # pragma: no cover - optional dependency detection only
                 device_preference = "cpu"
+            else:  # pragma: no branch - simple availability check
+                if not torch.cuda.is_available():
+                    device_preference = "cpu"
 
-        def _run_parallax() -> None:
-            image_bytes, suffix = image_payload
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmp_dir = Path(tmpdir)
-                input_path = tmp_dir / f"parallax_input{suffix}"
-                input_path.write_bytes(image_bytes)
-                temp_output = tmp_dir / "parallax_output.mp4"
+            video_dev_request = {
+                "provider": "parallax",
+                "prompt": prompt_text,
+                "model": normalized_model,
+                "duration_seconds": parallax_duration_seconds,
+                "negative_prompt": negative_text or None,
+                "image_resolved": True,
+                "device": device_preference,
+                "script": str(script_path),
+            }
 
-                cmd = [
-                    sys.executable,
-                    str(script_path),
-                    str(input_path),
-                    str(temp_output),
-                    "--seconds",
-                    str(parallax_duration_seconds),
-                    "--device",
-                    device_preference,
-                    "--layers",
-                    str(PARALLAX_DEFAULT_LAYERS),
-                ]
+            def _run_parallax() -> None:
+                image_bytes, suffix = image_payload
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmp_dir = Path(tmpdir)
+                    input_path = tmp_dir / f"parallax_input{suffix}"
+                    input_path.write_bytes(image_bytes)
+                    temp_output = tmp_dir / "parallax_output.mp4"
 
-                completed = subprocess.run(  # nosec B603
-                    cmd,
-                    check=False,
-                    cwd=str(APP_DIR),
-                    capture_output=True,
-                    text=True,
-                )
-                if completed.returncode != 0:
-                    stderr = (completed.stderr or "").strip()
-                    stdout = (completed.stdout or "").strip()
-                    message = stderr or stdout or "Unknown parallax error"
-                    snippet = message[:400]
-                    raise RuntimeError(snippet)
-                if not temp_output.exists():
-                    raise RuntimeError("Parallax animation did not produce a video file.")
-                output_path.write_bytes(temp_output.read_bytes())
+                    cmd = [
+                        sys.executable,
+                        str(script_path),
+                        str(input_path),
+                        str(temp_output),
+                        "--seconds",
+                        str(parallax_duration_seconds),
+                        "--device",
+                        device_preference,
+                        "--layers",
+                        str(PARALLAX_DEFAULT_LAYERS),
+                    ]
 
-        try:
-            await asyncio.to_thread(_run_parallax)
-        except HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=502, detail=f"Parallax animation failed: {exc}") from exc
-        result_model = PARALLAX_MODEL_ID
-    else:
-        if genai is None:
-            raise HTTPException(status_code=500, detail="google-genai package is not installed on the server.")
-        if genai_types is None:
-            raise HTTPException(status_code=500, detail="google-genai package is missing type definitions.")
+                    completed = subprocess.run(  # nosec B603
+                        cmd,
+                        check=False,
+                        cwd=str(APP_DIR),
+                        capture_output=True,
+                        text=True,
+                    )
+                    if completed.returncode != 0:
+                        stderr = (completed.stderr or "").strip()
+                        stdout = (completed.stdout or "").strip()
+                        message = stderr or stdout or "Unknown parallax error"
+                        snippet = message[:400]
+                        raise RuntimeError(snippet)
+                    if not temp_output.exists():
+                        raise RuntimeError("Parallax animation did not produce a video file.")
+                    output_path.write_bytes(temp_output.read_bytes())
 
-        api_key = require_gemini_api_key()
+            try:
+                await asyncio.to_thread(_run_parallax)
+            except HTTPException:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(status_code=502, detail=f"Parallax animation failed: {exc}") from exc
+            video_dev_response = {
+                "status": "ok",
+                "provider": "parallax",
+                "output_path": str(output_path),
+                "duration_seconds": parallax_duration_seconds,
+            }
+            result_model = PARALLAX_MODEL_ID
+        else:
+            if genai is None:
+                raise HTTPException(status_code=500, detail="google-genai package is not installed on the server.")
+            if genai_types is None:
+                raise HTTPException(status_code=500, detail="google-genai package is missing type definitions.")
 
-        reference_image = None
-        if image_data_url:
-            parsed = _parse_data_url(image_data_url)
-            if parsed:
-                mime, b64_data = parsed
-                try:
-                    image_bytes = base64.b64decode(b64_data, validate=True)
-                except (binascii.Error, ValueError):  # noqa: PERF203 - decoded path is tiny
-                    image_bytes = None
-                if image_bytes:
-                    reference_image = genai_types.Image(image_bytes=image_bytes, mime_type=mime)
+            api_key = require_gemini_api_key()
 
-        def _run_generation() -> None:
-            """Invoke google.genai synchronously; runs in a worker thread."""
+            reference_image = None
+            has_reference_image = False
+            if image_data_url:
+                parsed = _parse_data_url(image_data_url)
+                if parsed:
+                    mime, b64_data = parsed
+                    try:
+                        image_bytes = base64.b64decode(b64_data, validate=True)
+                    except (binascii.Error, ValueError):  # noqa: PERF203 - decoded path is tiny
+                        image_bytes = None
+                    if image_bytes:
+                        reference_image = genai_types.Image(image_bytes=image_bytes, mime_type=mime)
+                        has_reference_image = True
 
-            client = genai.Client(api_key=api_key)
-            request_payload: Dict[str, Any] = {
+            video_dev_request = {
+                "provider": "google-genai",
                 "model": normalized_model,
                 "prompt": prompt_text,
+                "negative_prompt": negative_text or None,
+                "has_reference_image": has_reference_image,
             }
-            config: Dict[str, Any] = {}
-            if negative_text:
-                config["negative_prompt"] = negative_text
-            if config:
-                request_payload["config"] = config
-            if reference_image is not None:
-                request_payload["image"] = reference_image
-            operation = client.models.generate_videos(**request_payload)
 
-            while not getattr(operation, "done", False):
-                time.sleep(10)
-                operation = client.operations.get(operation)
+            def _run_generation() -> None:
+                nonlocal video_dev_request, video_dev_response
+                """Invoke google.genai synchronously; runs in a worker thread."""
 
-            if getattr(operation, "error", None):
-                message = getattr(operation.error, "message", None) or "Video generation failed."
-                raise RuntimeError(message)
+                client = genai.Client(api_key=api_key)
+                request_payload: Dict[str, Any] = {
+                    "model": normalized_model,
+                    "prompt": prompt_text,
+                }
+                config: Dict[str, Any] = {}
+                if negative_text:
+                    config["negative_prompt"] = negative_text
+                if config:
+                    request_payload["config"] = config
+                if reference_image is not None:
+                    request_payload["image"] = reference_image
+                payload_log = copy.deepcopy(request_payload)
+                if reference_image is not None:
+                    payload_log["image"] = "<binary reference image>"
+                video_dev_request["payload"] = payload_log
+                operation = client.models.generate_videos(**request_payload)
 
-            response = getattr(operation, "response", None)
-            generated_videos = getattr(response, "generated_videos", None) if response else None
-            if not generated_videos:
-                raise RuntimeError("No video returned by the model.")
+                while not getattr(operation, "done", False):
+                    time.sleep(10)
+                    operation = client.operations.get(operation)
 
-            generated_video = generated_videos[0]
-            client.files.download(file=generated_video.video)
-            generated_video.video.save(str(output_path))
+                if getattr(operation, "error", None):
+                    message = getattr(operation.error, "message", None) or "Video generation failed."
+                    raise RuntimeError(message)
 
-        try:
-            await asyncio.to_thread(_run_generation)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=502, detail=f"Video generation failed: {exc}") from exc
+                response = getattr(operation, "response", None)
+                generated_videos = getattr(response, "generated_videos", None) if response else None
+                if not generated_videos:
+                    raise RuntimeError("No video returned by the model.")
+
+                generated_video = generated_videos[0]
+                client.files.download(file=generated_video.video)
+                generated_video.video.save(str(output_path))
+                video_dev_response = {
+                    "status": "completed",
+                    "provider": "google-genai",
+                    "video_count": len(generated_videos) if generated_videos else 0,
+                }
+
+            try:
+                await asyncio.to_thread(_run_generation)
+            except RuntimeError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(status_code=502, detail=f"Video generation failed: {exc}") from exc
+    except Exception as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        if not video_dev_request:
+            video_dev_request = {
+                "provider": normalized_model,
+                "model": normalized_model,
+                "prompt": prompt_text,
+                "negative_prompt": negative_text or None,
+            }
+        video_dev_response = {
+            "status": "error",
+            "provider": video_dev_request.get("provider", normalized_model),
+            "detail": detail,
+        }
+        _record_dev_inspect("video", video_dev_request, video_dev_response)
+        raise
+
+    if not video_dev_response:
+        video_dev_response = {
+            "status": "ok",
+            "provider": video_dev_request.get("provider", normalized_model),
+        }
+    video_dev_response.setdefault("output_path", str(output_path))
+    _record_dev_inspect("video", video_dev_request, video_dev_response)
 
     static_root = APP_DIR / "static"
     try:
@@ -5040,6 +5251,30 @@ async def get_dev_text_inspect() -> Dict[str, Any]:
         "turn_response": turn_response,
         "history_mode": history_mode,
     }
+
+
+@app.get("/api/dev/image_inspect")
+async def get_dev_image_inspect() -> Dict[str, Any]:
+    async with STATE_LOCK:
+        request_payload = copy.deepcopy(game_state.last_image_request)
+        response_payload = copy.deepcopy(game_state.last_image_response)
+    return {"request": request_payload, "response": response_payload}
+
+
+@app.get("/api/dev/video_inspect")
+async def get_dev_video_inspect() -> Dict[str, Any]:
+    async with STATE_LOCK:
+        request_payload = copy.deepcopy(game_state.last_video_request)
+        response_payload = copy.deepcopy(game_state.last_video_response)
+    return {"request": request_payload, "response": response_payload}
+
+
+@app.get("/api/dev/narration_inspect")
+async def get_dev_narration_inspect() -> Dict[str, Any]:
+    async with STATE_LOCK:
+        request_payload = copy.deepcopy(game_state.last_narration_request)
+        response_payload = copy.deepcopy(game_state.last_narration_response)
+    return {"request": request_payload, "response": response_payload}
 
 
 class SettingsUpdate(BaseModel):

@@ -186,6 +186,56 @@ class GetDevTextInspectTests(unittest.TestCase):
         self.assertEqual(rpg.game_state.last_text_request, self.request_snapshot)
 
 
+class GetDevMediaInspectTests(unittest.TestCase):
+    def setUp(self) -> None:
+        reset_state()
+
+    def tearDown(self) -> None:
+        reset_state()
+
+    def test_image_endpoint_returns_copies(self) -> None:
+        with TestClient(rpg.app) as client:
+            rpg.game_state.last_image_request = {"url": "/image"}
+            rpg.game_state.last_image_response = {"status": 200}
+
+            response = client.get("/api/dev/image_inspect")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["request"], {"url": "/image"})
+        self.assertEqual(payload["response"], {"status": 200})
+        payload["request"]["url"] = "/changed"
+        self.assertEqual(rpg.game_state.last_image_request, {"url": "/image"})
+
+    def test_video_endpoint_returns_copies(self) -> None:
+        with TestClient(rpg.app) as client:
+            rpg.game_state.last_video_request = {"model": "FramePack"}
+            rpg.game_state.last_video_response = {"status": "ok"}
+
+            response = client.get("/api/dev/video_inspect")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["request"], {"model": "FramePack"})
+        self.assertEqual(payload["response"], {"status": "ok"})
+        payload["response"]["status"] = "changed"
+        self.assertEqual(rpg.game_state.last_video_response, {"status": "ok"})
+
+    def test_narration_endpoint_returns_copies(self) -> None:
+        with TestClient(rpg.app) as client:
+            rpg.game_state.last_narration_request = {"voice": "Aria"}
+            rpg.game_state.last_narration_response = {"status": "ok", "audio_bytes": 1024}
+
+            response = client.get("/api/dev/narration_inspect")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["request"], {"voice": "Aria"})
+        self.assertEqual(payload["response"], {"status": "ok", "audio_bytes": 1024})
+        payload["response"]["audio_bytes"] = 2048
+        self.assertEqual(rpg.game_state.last_narration_response["audio_bytes"], 1024)
+
+
 class GenerateSceneVideoTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         reset_state()

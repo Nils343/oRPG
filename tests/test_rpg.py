@@ -57,6 +57,16 @@ def reset_state():
     rpg.game_state.last_image_tokens = None
     rpg.game_state.last_image_count = 0
     rpg.game_state.last_image_turn_index = None
+    rpg.game_state.last_text_request = {}
+    rpg.game_state.last_text_response = {}
+    rpg.game_state.last_turn_request = {}
+    rpg.game_state.last_turn_response = {}
+    rpg.game_state.last_image_request = {}
+    rpg.game_state.last_image_response = {}
+    rpg.game_state.last_video_request = {}
+    rpg.game_state.last_video_response = {}
+    rpg.game_state.last_narration_request = {}
+    rpg.game_state.last_narration_response = {}
     rpg.game_state.last_token_usage = {}
     rpg.game_state.last_turn_runtime = None
     rpg.game_state.session_token_usage = {"input": 0, "output": 0, "thinking": 0}
